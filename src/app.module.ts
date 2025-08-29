@@ -1,0 +1,37 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+
+import { UsuariosModule } from './usuarios/usuarios.module';
+import { DocentesModule } from './docentes/docentes.module';
+import { AuthModule } from './auth/auth.module'; 
+
+@Module({  
+  imports: [
+    ConfigModule.forRoot({
+      envFilePath: `.env.${process.env.NODE_ENV}`
+    }),
+
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        type: 'postgres',
+        host: configService.get('DB_HOST'),
+        port: configService.get('DB_PORT'),
+        username: configService.get('DB_USERNAME'),
+        database: configService.get('DB_NAME'),
+        password: configService.get('DB_PASSWORD'),
+        entities: [ __dirname + '/../**/*.entity{.ts,.js}' ],
+        synchronize: false
+      }),
+      inject: [ConfigService]
+    }),
+
+    UsuariosModule,
+
+    DocentesModule,
+
+    AuthModule
+  ],
+})
+export class AppModule {} 
