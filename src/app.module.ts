@@ -5,6 +5,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UsuariosModule } from './usuarios/usuarios.module';
 import { DocentesModule } from './docentes/docentes.module';
 import { AuthModule } from './auth/auth.module'; 
+import { MateriasModule } from './materias/materias.module';
+import { PeriodosLectivosModule } from './periodos-lectivos/periodos-lectivos.module';
+import { TrimestresModule } from './trimestres/trimestres.module';
 
 @Module({  
   imports: [
@@ -31,7 +34,13 @@ import { AuthModule } from './auth/auth.module';
 
     DocentesModule,
 
-    AuthModule
+    AuthModule,
+
+    MateriasModule,
+
+    PeriodosLectivosModule,
+
+    TrimestresModule
   ],
 })
 export class AppModule {} 
