@@ -4,18 +4,18 @@ import { Column, CreateDateColumn, Entity, OneToOne, PrimaryGeneratedColumn, Upd
 export enum Role {
     ADMIN = 'ADMIN',
     DOCENTE = 'DOCENTE',
-    AUTORIDAD = 'AUTORIDAD'
+    SECRETARIA = 'SECRETARIA'
 }
 
-export enum Status {
-    ACTIVE = 'ACTIVE',
-    INACTIVE = 'INACTIVE',
-    PENDING = 'PENDING'
+export enum Estado {
+    ACTIVO = 'ACTIVO',
+    INACTIVO = 'INACTIVO',
+    PENDIENTE = 'PENDIENTE'
 }
 
 @Entity('usuarios') 
 export class Usuario {
-    @PrimaryGeneratedColumn()
+    @PrimaryGeneratedColumn('uuid')
     id: string;
 
     @Column({ unique: true })
@@ -27,8 +27,8 @@ export class Usuario {
     @Column({ type: 'enum', enum: Role, default: Role.DOCENTE })
     rol: Role;
 
-    @Column({ type: 'enum', enum: Status, default: Status.ACTIVE })
-    estado: Status;
+    @Column({ type: 'enum', enum: Estado, default: Estado.ACTIVO })
+    estado: Estado;
 
     @CreateDateColumn()
     createdAt: Date;

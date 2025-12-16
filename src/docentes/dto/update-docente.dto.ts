@@ -1,5 +1,6 @@
-import { IsOptional, IsString, IsEnum } from 'class-validator';
-import { nivelAsignado } from '../entities/docente.entity';
+import { IsOptional, IsString, IsEnum, IsUrl, Min, IsEmail, ValidateIf } from 'class-validator';
+import { NivelAsignado } from '../entities/docente.entity';
+import { Role } from '../../usuarios/entities/usuario.entity';
 
 export class UpdateDocenteDto {
   @IsOptional()
@@ -19,6 +20,16 @@ export class UpdateDocenteDto {
   telefono?: string;
 
   @IsOptional()
-  @IsEnum(nivelAsignado)
-  nivelAsignado?: nivelAsignado;
+  @IsEnum(NivelAsignado)
+  nivelAsignado?: NivelAsignado;
+
+  @IsOptional()
+  @ValidateIf((o) => o.foto_perfil_url && o.foto_perfil_url.trim() !== '')
+  @IsUrl({})
+  foto_perfil_url?: string;
+
+  @IsOptional()
+  @ValidateIf((o) => o.foto_titulo_url && o.foto_titulo_url.trim() !== '')
+  @IsUrl({})
+  foto_titulo_url?: string;
 }

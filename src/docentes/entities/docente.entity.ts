@@ -5,14 +5,15 @@ import { MateriaCurso } from '../../materias-curso/entities/materias-curso.entit
 import { CalificacionInsumo } from '../../calificaciones-insumo/entities/calificacion-insumo.entity';
  */
 
-export enum nivelAsignado {
+export enum NivelAsignado {
     BASICA = 'BASICA',
-    BACHILLERATO = 'BACHILLERATO'
+    BACHILLERATO = 'BACHILLERATO',
+    GLOBAL = 'GLOBAL'
 }
 
 @Entity('docentes')
 export class Docente {
-    @PrimaryGeneratedColumn()
+    @PrimaryGeneratedColumn('uuid')
     id: string;
 
     @Column()
@@ -27,14 +28,17 @@ export class Docente {
     @Column({ nullable: true })
     telefono: string;
 
-    @Column({type: 'enum', enum: nivelAsignado })
-    nivelAsignado: nivelAsignado;
+    @Column({type: 'enum', enum: NivelAsignado })
+    nivelAsignado: NivelAsignado;
 
     @Column({ nullable: true })
     foto_perfil_url: string;
 
     @Column({ nullable: true })
     foto_titulo_url: string;
+
+/*     @Column({ nullable: true })
+    expertise: string; */
 
     @Column({ default: false })
     perfil_completo: boolean;
@@ -45,7 +49,7 @@ export class Docente {
     @UpdateDateColumn()
     updatedAt: Date;
 
-    @OneToOne(() => Usuario, usuario => usuario.docente)
-    @JoinColumn()
+    @OneToOne(() => Usuario, { eager: true, onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'usuario_id' })
     usuario_id: Usuario;
 }

@@ -16,7 +16,7 @@ export enum NombreTrimestre {
 @Entity('trimestres')
 export class Trimestre {
 
-    @PrimaryGeneratedColumn()
+    @PrimaryGeneratedColumn('uuid')
     id: string;
 
     @Column({ type: 'enum', enum: NombreTrimestre })

@@ -2,9 +2,9 @@ import { Controller, Get, Post, Body, Patch, Param, UseGuards, Put } from '@nest
 import { PeriodosLectivosService } from './periodos-lectivos.service';
 import { CreatePeriodoLectivoDto } from './dto/create-periodos-lectivo.dto';
 import { UpdatePeriodoLectivoDto } from './dto/update-periodos-lectivo.dto';
-import { AdminGuard } from 'src/auth/guards/admin.guard';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
-import { TrimestresService } from 'src/trimestres/trimestres.service';
+import { AdminGuard } from '../auth/guards/admin.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { TrimestresService } from '../trimestres/trimestres.service';
 
 @Controller('periodos-lectivos')
 export class PeriodosLectivosController {

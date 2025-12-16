@@ -2,12 +2,18 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, 
 import { DocentesService } from './docentes.service';
 import { CompletarPerfilDto } from './dto/completar-perfil.dto';
 import { UpdateDocenteDto } from './dto/update-docente.dto';
-import { AdminGuard } from 'src/auth/guards/admin.guard';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { AdminGuard } from '../auth/guards/admin.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('docentes')
 export class DocentesController {
   constructor(private readonly docentesService: DocentesService) {}
+
+  @UseGuards(AdminGuard)
+  @Get()
+  findAll() {
+    return this.docentesService.findAll();
+  }
 
   @UseGuards(JwtAuthGuard)
   @Get('mi-perfil')
@@ -25,12 +31,6 @@ export class DocentesController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.docentesService.findOne(id);
-  }
-
-  @UseGuards(AdminGuard)
-  @Get()
-  findAll() {
-    return this.docentesService.findAll();
   }
 
   @UseGuards(AdminGuard)

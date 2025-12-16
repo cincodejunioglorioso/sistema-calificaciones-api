@@ -4,8 +4,8 @@ import { UpdateTrimestreDto } from './dto/update-trimestre.dto';
 import { NombreTrimestre, Trimestre, TrimestreEstado } from './entities/trimestre.entity';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
-import { PeriodosLectivosService } from 'src/periodos-lectivos/periodos-lectivos.service';
-import { EstadoPeriodo } from 'src/periodos-lectivos/entities/periodos-lectivo.entity';
+import { PeriodosLectivosService } from '../periodos-lectivos/periodos-lectivos.service';
+import { EstadoPeriodo } from '../periodos-lectivos/entities/periodos-lectivo.entity';
 
 @Injectable()
 export class TrimestresService {
@@ -115,77 +115,113 @@ export class TrimestresService {
   // 👑 ADMIN: Actualizar trimestre (cambiar fechas)
   async update(id: string, updateTrimestreDto: UpdateTrimestreDto) {
     const trimestre = await this.findOne(id);
+    const periodo = await this.periodosLectivosService.findOne(trimestre.periodo_lectivo_id);
 
-    // Validar que el trimestre no esté finalizado (FINALIZADO)
-    if (trimestre.estado === TrimestreEstado.FINALIZADO) {
-      throw new BadRequestException('No se puede modificar un trimestre finalizado');
+    // ✅ VALIDACIÓN 1: Si se está cambiando el estado desde FINALIZADO
+    if (trimestre.estado === TrimestreEstado.FINALIZADO && 
+        updateTrimestreDto.estado && 
+        updateTrimestreDto.estado !== TrimestreEstado.FINALIZADO) {
+      
+      // Validar que el período esté activo para reactivar
+      if (periodo.estado !== EstadoPeriodo.ACTIVO) {
+        throw new BadRequestException(
+          `No se puede cambiar el estado de un trimestre cuando el período lectivo está ${periodo.estado.toLowerCase()}. ` +
+          `Solo se pueden modificar trimestres del período lectivo activo.`
+        );
+      }
     }
 
-    // Validar fechas si se están actualizando
+    // ✅ VALIDACIÓN 2: Si se está activando un trimestre, validar que el período esté activo
+    if (updateTrimestreDto.estado === TrimestreEstado.ACTIVO && 
+        trimestre.estado !== TrimestreEstado.ACTIVO) {
+      
+      if (periodo.estado !== EstadoPeriodo.ACTIVO) {
+        throw new BadRequestException(
+          'No se puede activar un trimestre cuando el período lectivo no está activo'
+        );
+      }
+
+      // Desactivar otros trimestres activos del mismo período
+      await this.trimestreRepository.update(
+        { 
+          estado: TrimestreEstado.ACTIVO,
+          periodo_lectivo_id: trimestre.periodo_lectivo_id
+        },
+        { estado: TrimestreEstado.FINALIZADO }
+      );
+    }
+
+    // ✅ VALIDACIÓN 3: Validar fechas si se están actualizando
     if (updateTrimestreDto.fechaInicio || updateTrimestreDto.fechaFin) {
       const fechaInicio = new Date(updateTrimestreDto.fechaInicio || trimestre.fechaInicio);
       const fechaFin = new Date(updateTrimestreDto.fechaFin || trimestre.fechaFin);
 
+      // Validación básica: fecha fin > fecha inicio
       if (fechaFin <= fechaInicio) {
         throw new BadRequestException('La fecha de fin debe ser posterior a la fecha de inicio');
       }
+
+      // ✅ VALIDACIÓN 4: Las fechas del trimestre deben estar dentro del período lectivo
+      const periodoInicio = new Date(periodo.fechaInicio);
+      const periodoFin = new Date(periodo.fechaFin);
+
+      if (fechaInicio < periodoInicio) {
+        throw new BadRequestException(
+          `La fecha de inicio del trimestre (${fechaInicio.toLocaleDateString('es-ES')}) ` +
+          `no puede ser anterior al inicio del período lectivo (${periodoInicio.toLocaleDateString('es-ES')})`
+        );
+      }
+
+      if (fechaFin > periodoFin) {
+        throw new BadRequestException(
+          `La fecha de fin del trimestre (${fechaFin.toLocaleDateString('es-ES')}) ` +
+          `no puede ser posterior al fin del período lectivo (${periodoFin.toLocaleDateString('es-ES')})`
+        );
+      }
+
+      // ✅ VALIDACIÓN 5: No debe solaparse con otros trimestres del mismo período
+      await this.validarSolapamientoFechas(id, trimestre.periodo_lectivo_id, fechaInicio, fechaFin);
     }
 
+    // ✅ Realizar la actualización
     await this.trimestreRepository.update(id, updateTrimestreDto);
+
+    const trimestreActualizado = await this.findOne(id);
 
     return {
       message: 'Trimestre actualizado exitosamente',
-      trimestre: await this.findOne(id)
+      trimestre: trimestreActualizado,
+      cambios: {
+        fechas_actualizadas: !!(updateTrimestreDto.fechaInicio || updateTrimestreDto.fechaFin),
+        estado_actualizado: !!updateTrimestreDto.estado,
+        estado_anterior: trimestre.estado,
+        estado_nuevo: trimestreActualizado.estado
+      }
     };
   }
 
-  // 👑 ADMIN: Cambiar estado del trimestre
-  async cambiarEstado(id: string) {
-    const trimestre = await this.findOne(id);
+  // ✅ NUEVO MÉTODO: Validar solapamiento de fechas
+  private async validarSolapamientoFechas(trimestreId: string, periodoId: string, fechaInicio: Date, fechaFin: Date) {
+    const otrosTrimestres = await this.trimestreRepository
+      .createQueryBuilder('trimestre')
+      .where('trimestre.periodo_lectivo_id = :periodoId', { periodoId })
+      .andWhere('trimestre.id != :trimestreId', { trimestreId })
+      .andWhere(
+        '(trimestre.fechaInicio < :fechaFin AND trimestre.fechaFin > :fechaInicio)',
+        {
+          fechaInicio: fechaInicio.toISOString().split('T')[0],
+          fechaFin: fechaFin.toISOString().split('T')[0]
+        }
+      )
+      .getMany();
 
-    let nuevoEstado: TrimestreEstado;
-
-    switch (trimestre.estado) {
-      case TrimestreEstado.PENDIENTE:
-        nuevoEstado = TrimestreEstado.ACTIVO;
-        // Desactivar otros trimestres activos
-        await this.trimestreRepository.update(
-          { estado: TrimestreEstado.ACTIVO },
-          { estado: TrimestreEstado.FINALIZADO }
-        );
-        break;
-
-      case TrimestreEstado.ACTIVO:
-        nuevoEstado = TrimestreEstado.FINALIZADO;
-        break;
-
-      case TrimestreEstado.FINALIZADO:
-        // 🆕 VALIDACIÓN INTELIGENTE: ¿Se puede reactivar?
-        await this.validarReactivacion(trimestre);
-        nuevoEstado = TrimestreEstado.ACTIVO;
-
-        // Desactivar otros trimestres activos antes de reactivar
-        await this.trimestreRepository.update(
-          { estado: TrimestreEstado.ACTIVO },
-          { estado: TrimestreEstado.FINALIZADO }
-        );
-        break;
-
-      default:
-        nuevoEstado = TrimestreEstado.PENDIENTE;
+    if (otrosTrimestres.length > 0) {
+      const trimestresConflicto = otrosTrimestres.map(t => t.nombre).join(', ');
+      throw new BadRequestException(
+        `Las fechas del trimestre se solapan con: ${trimestresConflicto}. ` +
+        `Los trimestres no pueden tener fechas superpuestas.`
+      );
     }
-
-    await this.trimestreRepository.update(id, { estado: nuevoEstado });
-
-    return {
-      message: `Trimestre ${this.getEstadoMensaje(nuevoEstado)} exitosamente`,
-      trimestre: {
-        id: trimestre.id,
-        nombre: trimestre.nombre
-      },
-      estado_anterior: trimestre.estado,
-      estado_nuevo: nuevoEstado
-    };
   }
 
   // 🔒 Validar si se puede reactivar un trimestre finalizado

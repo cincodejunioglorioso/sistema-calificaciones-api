@@ -7,10 +7,10 @@ import { UpdateMateriaDto } from './dto/update-materia.dto';
 
 @Injectable()
 export class MateriasService {
-    constructor (
+    constructor(
         @InjectRepository(Materia)
         private readonly materiasRepository: Repository<Materia>
-    ) {}
+    ) { }
 
     async create(createMateriaDto: CreateMateriaDto) {
         const materia = this.materiasRepository.create(createMateriaDto);
@@ -18,10 +18,16 @@ export class MateriasService {
     };
 
     async findAll() {
-        return await this.materiasRepository.find({
-            where: { estado: EstadoMateria.ACTIVA },
+
+        const materias = await this.materiasRepository.find({
             order: { createdAt: 'DESC' }
         });
+
+        if (materias.length === 0) {
+            throw new NotFoundException('No hay materias registradas');
+        }
+
+        return materias;
     };
 
     async findOne(id: string) {
@@ -30,7 +36,7 @@ export class MateriasService {
         });
 
         if (!materia) throw new NotFoundException('Materia no encontrada');
-        
+
         return materia;
     };
 
@@ -40,26 +46,26 @@ export class MateriasService {
 
         Object.assign(materia, updateMateriaDto);
         const updatedMateria = await this.materiasRepository.save(materia);
-        
+
         return {
             message: 'Materia actualizada exitosamente',
             materia: updatedMateria
         }
-   };
-
-   async remove(id: string) {
-       const materia = await this.findOne(id);
-       if (!materia) throw new NotFoundException('Materia no encontrada');
-
-       const nuevoEstado = materia.estado === EstadoMateria.ACTIVA
-       ? EstadoMateria.INACTIVA : EstadoMateria.ACTIVA;
-
-       await this.materiasRepository.update(id, { estado: nuevoEstado });
-
-
-    return {
-        message: `Materia ${nuevoEstado === EstadoMateria.ACTIVA ? 'activada' : 'desactivada'} exitosamente`,
     };
-   };
+
+    async remove(id: string) {
+        const materia = await this.findOne(id);
+        if (!materia) throw new NotFoundException('Materia no encontrada');
+
+        const nuevoEstado = materia.estado === EstadoMateria.ACTIVO
+            ? EstadoMateria.INACTIVO : EstadoMateria.ACTIVO;
+
+        await this.materiasRepository.update(id, { estado: nuevoEstado });
+
+
+        return {
+            message: `Materia ${nuevoEstado === EstadoMateria.ACTIVO ? 'activada' : 'desactivada'} exitosamente`,
+        };
+    };
 
 }

@@ -8,6 +8,10 @@ import { AuthModule } from './auth/auth.module';
 import { MateriasModule } from './materias/materias.module';
 import { PeriodosLectivosModule } from './periodos-lectivos/periodos-lectivos.module';
 import { TrimestresModule } from './trimestres/trimestres.module';
+import { CursosModule } from './cursos/cursos.module';
+import { EstudiantesModule } from './estudiantes/estudiantes.module';
+import { MateriaCursoModule } from './materia-curso/materia-curso.module';
+import { MatriculasModule } from './matriculas/matriculas.module';
 
 @Module({  
   imports: [
@@ -40,7 +44,15 @@ import { TrimestresModule } from './trimestres/trimestres.module';
 
     PeriodosLectivosModule,
 
-    TrimestresModule
+    TrimestresModule,
+
+    CursosModule,
+
+    EstudiantesModule,
+
+    MateriaCursoModule,
+
+    MatriculasModule
   ],
 })
 export class AppModule {} 

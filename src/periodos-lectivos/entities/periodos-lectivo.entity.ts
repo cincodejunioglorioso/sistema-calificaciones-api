@@ -8,7 +8,7 @@ export enum EstadoPeriodo {
 @Entity('periodos_lectivos')
 export class PeriodoLectivo {
 
-    @PrimaryGeneratedColumn()
+    @PrimaryGeneratedColumn('uuid')
     id: string;
 
     @Column()
@@ -20,11 +20,7 @@ export class PeriodoLectivo {
     @Column({type: 'date'})
     fechaFin: Date;   
 
-    @Column({
-        type: 'enum',
-        enum: EstadoPeriodo,
-        default: EstadoPeriodo.ACTIVO
-    })
+    @Column({ type: 'enum', enum: EstadoPeriodo, default: EstadoPeriodo.ACTIVO })
     estado: EstadoPeriodo;
 
     @CreateDateColumn()

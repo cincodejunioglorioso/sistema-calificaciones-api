@@ -3,7 +3,7 @@ import { PeriodosLectivosService } from './periodos-lectivos.service';
 import { PeriodosLectivosController } from './periodos-lectivos.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PeriodoLectivo } from './entities/periodos-lectivo.entity';
-import { TrimestresModule } from 'src/trimestres/trimestres.module';
+import { TrimestresModule } from '../trimestres/trimestres.module';
 
 @Module({
   imports: [

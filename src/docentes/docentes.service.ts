@@ -1,7 +1,9 @@
+// nest-backend/src/docentes/docentes.service.ts
+
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { Docente } from './entities/docente.entity';
-import { Status, Usuario } from 'src/usuarios/entities/usuario.entity';
+import { Estado, Usuario } from '../usuarios/entities/usuario.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UpdateDocenteDto } from './dto/update-docente.dto';
 import { CompletarPerfilDto } from './dto/completar-perfil.dto';
@@ -82,7 +84,7 @@ export class DocentesService {
     }
 
     return docente;
-  }  
+  }
 
   // 👑 ADMIN: Actualizar datos del docente
   async update(id: string, updateDocenteDto: UpdateDocenteDto) {
@@ -95,42 +97,85 @@ export class DocentesService {
       throw new NotFoundException('Docente no encontrado');
     }
 
+    // Actualizar solo campos del docente
     Object.assign(docente, updateDocenteDto);
     const updatedDocente = await this.docenteRepository.save(docente);
 
+    // Recuperar con todas las relaciones para la respuesta
+    const docenteCompleto = await this.docenteRepository.findOne({
+      where: { id },
+      relations: ['usuario_id'],
+      select: {
+        id: true,
+        nombres: true,
+        apellidos: true,
+        cedula: true,
+        telefono: true,
+        nivelAsignado: true,
+        foto_perfil_url: true,
+        foto_titulo_url: true,
+        perfil_completo: true,
+        createdAt: true,
+        updatedAt: true,
+        usuario_id: {
+          id: true,
+          email: true,
+          estado: true,
+          rol: true,
+          createdAt: true
+        }
+      }
+    });
+
     return {
       message: 'Docente actualizado exitosamente',
-      docente: updatedDocente
+      docente: docenteCompleto
     };
   }
 
   // 👤 DOCENTE: Completar mi propio perfil
   async completarPerfil(userId: string, completarPerfilDto: CompletarPerfilDto) {
     const docente = await this.findByUserId(userId);
-    
+
     if (!docente) {
       throw new NotFoundException('Docente no encontrado');
     }
 
-    Object.assign(docente, completarPerfilDto);
+    // Filtrar campos vacíos y null antes de asignar
+    const datosLimpios = Object.entries(completarPerfilDto).reduce((acc, [key, value]) => {
+      if (value !== '' && value !== null && value !== undefined) {
+        acc[key] = value;
+      }
+      return acc;
+    }, {});
+
+    Object.assign(docente, datosLimpios);
 
     const camposImportantes = ['foto_titulo_url', 'foto_perfil_url'];
 
     const camposCompletos = camposImportantes.every(campo =>
       docente[campo] && docente[campo].trim() !== ''
     );
-      
+
     if (camposCompletos) {
       docente.perfil_completo = true;
     }
 
     const updatedDocente = await this.docenteRepository.save(docente);
 
+    // Recuperar con relaciones completas
+    const docenteCompleto = await this.docenteRepository.findOne({
+      where: { id: updatedDocente.id },
+      relations: ['usuario_id']
+    });
+
+    if (!docenteCompleto) {
+      throw new NotFoundException('Error al recuperar docente actualizado');
+    }
+
     return {
-      message: 'Perfil de docente completado exitosamente',
-      perfil_completo: updatedDocente.perfil_completo,
-      docente: updatedDocente
+      perfil_completo: docenteCompleto.perfil_completo,
+      docente: docenteCompleto
     };
   }
-
 }

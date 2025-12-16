@@ -1,15 +1,16 @@
-import { IsNotEmpty, IsString, IsUrl } from 'class-validator';
+import { IsOptional, IsString, IsUrl } from 'class-validator';
 
 export class CompletarPerfilDto {
+  
+  @IsOptional()
   @IsUrl()
-  @IsNotEmpty()
   foto_perfil_url?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   telefono?: string;
 
+  @IsOptional()
   @IsUrl()
-  @IsNotEmpty()
   foto_titulo_url?: string;
 }

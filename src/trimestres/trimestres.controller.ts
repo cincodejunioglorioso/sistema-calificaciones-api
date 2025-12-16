@@ -2,8 +2,8 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Put } fro
 import { TrimestresService } from './trimestres.service';
 import { CreateTrimestreDto } from './dto/create-trimestre.dto';
 import { UpdateTrimestreDto } from './dto/update-trimestre.dto';
-import { AdminGuard } from 'src/auth/guards/admin.guard';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { AdminGuard } from '../auth/guards/admin.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('trimestres')
 export class TrimestresController {
@@ -42,12 +42,5 @@ export class TrimestresController {
   @Put(':id')
   update(@Param('id') id: string, @Body() updateTrimestreDto: UpdateTrimestreDto) {
     return this.trimestresService.update(id, updateTrimestreDto);
-  }
-
-  // 👑 ADMIN: Cambiar estado del trimestre (PENDIENTE → ACTIVO → FINALIZADO)
-  @UseGuards(AdminGuard)
-  @Patch(':id/cambiar-estado')
-  cambiarEstado(@Param('id') id: string) {
-    return this.trimestresService.cambiarEstado(id);
   }
 }

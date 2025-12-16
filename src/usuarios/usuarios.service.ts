@@ -1,18 +1,85 @@
 // usuarios/usuarios.service.ts
-import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Usuario, Status, Role } from './entities/usuario.entity';
+import { DataSource, Repository } from 'typeorm';
+import { Usuario, Role, Estado } from './entities/usuario.entity';
+import { Docente, NivelAsignado } from '../docentes/entities/docente.entity';
+import { RegisterDto } from './dto/register.dto';
+import { UpdateUsuarioDto } from './dto/update-usuario.dto';
 import * as bcrypt from 'bcrypt';
 import { CambiarPasswordDto } from './dto/cambiar-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+
 
 @Injectable()
 export class UsuariosService {
   constructor(
     @InjectRepository(Usuario)
     private usuarioRepository: Repository<Usuario>,
+    @InjectRepository(Docente)
+    private docenteRepository: Repository<Docente>,
+    private datasource: DataSource,
   ) { }
+
+  async register(registerDto: RegisterDto) {
+    const { email, password, rol, nombres, apellidos, cedula, telefono, nivel_asignado: nivel } = registerDto;
+
+    const existingUser = await this.usuarioRepository.findOne(
+      {
+        where: { email }
+      }
+    );
+
+    if (existingUser) {
+      throw new ConflictException('El email ya se encuentra en uso');
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    return await this.datasource.transaction(async manager => {
+      const usuario = manager.create(Usuario, {
+        email,
+        password_hash: hashedPassword,
+        rol: rol || Role.DOCENTE
+      });
+
+      const savedUser = await manager.save(usuario);
+      let savedDocente: Docente | null = null;
+
+      const nivelAsignar = savedUser.rol === Role.SECRETARIA
+        ? NivelAsignado.GLOBAL
+        : nivel;
+
+      const docente = manager.create(Docente, {
+        nombres,
+        apellidos,
+        cedula,
+        telefono,
+        nivelAsignado: nivelAsignar,
+        usuario_id: savedUser,
+        perfil_completo: false
+      });
+
+      savedDocente = await manager.save(docente);
+
+      const { password_hash: _, ...userWithoutPassword } = savedUser;
+
+      return {
+        message: `Usuario ${savedUser.rol} creado exitosamente`,
+        usuario: userWithoutPassword,
+        ...(savedDocente && {
+          docente: {
+            id: savedDocente.id,
+            nombres: savedDocente.nombres,
+            apellidos: savedDocente.apellidos,
+            cedula: savedDocente.cedula,
+            telefono: savedDocente.telefono,
+            nivel_asignado: savedDocente.nivelAsignado,
+          }
+        })
+      };
+    });
+  }
 
   // 👑 ADMIN: Listar todos los usuarios
   async findAll() {
@@ -20,7 +87,7 @@ export class UsuariosService {
       select: ['id', 'email', 'rol', 'estado', 'createdAt'],
       order: { createdAt: 'DESC' },
       where: {
-        estado: Status.ACTIVE
+        estado: Estado.ACTIVO
       }
     });
   }
@@ -39,16 +106,35 @@ export class UsuariosService {
     return usuario;
   }
 
+  async update(id: string, updateUsuarioDto: UpdateUsuarioDto) {
+    const usuario = await this.findOne(id);
+
+    Object.assign(usuario, updateUsuarioDto);
+    usuario.updatedAt = new Date();
+
+    return await this.usuarioRepository.save(usuario);
+  }
+
+  async remove(id: string) {
+    const usuario = await this.findOne(id);
+    return await this.usuarioRepository.remove(usuario);
+  }
+
   // 👑 ADMIN: Cambiar estado de cualquier usuario
   async cambiarEstado(id: string) {
     const usuario = await this.findOne(id);
 
-    const nuevoEstado = usuario.estado === Status.ACTIVE ? Status.INACTIVE : Status.ACTIVE;
+    const nuevoEstado =
+      usuario.estado === Estado.ACTIVO ? Estado.INACTIVO : Estado.ACTIVO;
 
     await this.usuarioRepository.update(id, { estado: nuevoEstado });
 
+    // Recuperar el usuario actualizado
+    const usuarioActualizado = await this.findOne(id);
+
     return {
-      message: `Usuario ${nuevoEstado === Status.ACTIVE ? 'activado' : 'desactivado'} exitosamente`,
+      message: `Usuario ${nuevoEstado === Estado.ACTIVO ? 'activado' : 'desactivado'} exitosamente`,
+      usuario: usuarioActualizado,
     };
   }
 
@@ -58,18 +144,18 @@ export class UsuariosService {
 
     await this.usuarioRepository.update(id, { rol: nuevoRol });
 
+    // Recuperar el usuario actualizado
+    const usuarioActualizado = await this.findOne(id);
+
     return {
       message: 'Rol actualizado exitosamente',
-      usuario: {
-        id: usuario.id,
-        email: usuario.email
-      },
+      usuario: usuarioActualizado,
       rol_anterior: usuario.rol,
-      rol_nuevo: nuevoRol
+      rol_nuevo: nuevoRol,
     };
   }
 
-  // 👤 USUARIO: Cambiar MI propia contraseña
+  // 👤 USUARIO: Cambiar contraseña propia
   async cambiarMiPassword(userId: string, cambiarPasswordDto: CambiarPasswordDto) {
     const usuario = await this.usuarioRepository.findOne({
       where: { id: userId },
@@ -112,7 +198,6 @@ export class UsuariosService {
       throw new NotFoundException('Usuario no encontrado');
     }
 
-    // El admin no necesita conocer la contraseña actual
     const hashedPassword = await bcrypt.hash(resetPasswordDto.newPassword, 10);
 
     await this.usuarioRepository.update(id, {
@@ -128,6 +213,5 @@ export class UsuariosService {
       }
     };
   }
-
 
 }

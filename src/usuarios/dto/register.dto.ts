@@ -1,6 +1,6 @@
-import { IsString, IsEmail, IsNotEmpty, MinLength, IsEnum, IsOptional, MaxLength, Length } from "class-validator";
-import { nivelAsignado } from "src/docentes/entities/docente.entity";
-import { Role } from "src/usuarios/entities/usuario.entity";
+import { IsString, IsEmail, IsNotEmpty, MinLength, IsEnum, MaxLength, Length } from "class-validator";
+import { NivelAsignado } from "../../docentes/entities/docente.entity";
+import { Role } from "../../usuarios/entities/usuario.entity";
 
 export class RegisterDto {
 
@@ -15,8 +15,8 @@ export class RegisterDto {
     password: string;
 
     @IsEnum(Role)
-    @IsOptional()
-    rol?: Role = Role.DOCENTE;
+    @IsNotEmpty()
+    rol: Role;
 
     @IsString()
     @IsNotEmpty()
@@ -35,7 +35,7 @@ export class RegisterDto {
     @Length(10, 10)
     telefono: string;
     
-    @IsEnum(nivelAsignado)
+    @IsEnum(NivelAsignado)
     @IsNotEmpty()
-    nivel_asignado: nivelAsignado;
+    nivel_asignado: NivelAsignado;
 }

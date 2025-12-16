@@ -6,9 +6,8 @@ export class CreateMateriaDto {
   @Length(3, 50, { message: 'El nombre debe tener entre 3 y 50 caracteres' })
   nombre: string;
 
-  @IsEnum(NivelEducativo, { 
-    message: 'El nivel educativo debe ser INICIAL, BASICA o BACHILLERATO' 
-  })
+  @IsEnum(NivelEducativo, {
+    message: 'El nivel educativo debe ser BASICA, BACHILLERATO o GENERAL'  })
   nivelEducativo: NivelEducativo;
 
   @IsOptional()

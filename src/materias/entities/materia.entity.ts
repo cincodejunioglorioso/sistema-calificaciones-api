@@ -2,9 +2,9 @@ import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateCol
 
 
 export enum NivelEducativo {
-  BASICA = 'BASICA',
-  BACHILLERATO = 'BACHILLERATO',
-  AMBOS = 'AMBOS'
+    BASICA = 'BASICA',
+    BACHILLERATO = 'BACHILLERATO',
+    GENERAL = 'GENERAL',
 }
 
 export enum TrimestreAplicable {
@@ -15,14 +15,14 @@ export enum TrimestreAplicable {
 }
 
 export enum EstadoMateria {
-    ACTIVA = 'ACTIVA',
-    INACTIVA = 'INACTIVA',
+    ACTIVO = 'ACTIVO',
+    INACTIVO = 'INACTIVO',
 }
 
 @Entity('materias')
 export class Materia {
 
-    @PrimaryGeneratedColumn()
+    @PrimaryGeneratedColumn('uuid')
     id: string;
 
     @Column()
@@ -34,7 +34,7 @@ export class Materia {
     @Column({ type: 'enum', enum: TrimestreAplicable })
     trimestreAplicable: TrimestreAplicable;
 
-    @Column({ type: 'enum', enum: EstadoMateria, default: EstadoMateria.ACTIVA })
+    @Column({ type: 'enum', enum: EstadoMateria, default: EstadoMateria.ACTIVO })
     estado: EstadoMateria;
 
     @CreateDateColumn()
