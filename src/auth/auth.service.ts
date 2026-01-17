@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Usuario } from '../usuarios/entities/usuario.entity';
+import { Role, Usuario } from '../usuarios/entities/usuario.entity';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
@@ -18,7 +18,8 @@ export class AuthService {
     const { email, password } = loginDto;
     const usuario = await this.usuarioRepository.findOne(
       {
-        where: { email }
+        where: { email },
+        relations: ['docente'],
       }
     );
 
@@ -35,7 +36,8 @@ export class AuthService {
     const payload = {
       sub: usuario.id,
       email: usuario.email,
-      rol: usuario.rol
+      rol: usuario.rol,
+      docente_id: usuario.rol === Role.DOCENTE && usuario.docente ? usuario.docente.id : null,
     };
 
     const access_token = await this.jwtService.signAsync(payload);
@@ -45,7 +47,8 @@ export class AuthService {
       usuario: {
         id: usuario.id,
         email: usuario.email,
-        rol: usuario.rol
+        rol: usuario.rol,
+        docente_id: payload.docente_id,
       }
     };
   }

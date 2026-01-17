@@ -40,7 +40,10 @@ export class Trimestre {
     @Column()
     periodo_lectivo_id: string;
 
-    @ManyToOne(() => PeriodoLectivo, { eager: true})
+    @ManyToOne(() => PeriodoLectivo, (periodo) => periodo.trimestres, { 
+        eager: true,
+        onDelete: 'CASCADE'
+    })
     @JoinColumn({ name: 'periodo_lectivo_id' })
     periodo_lectivo: PeriodoLectivo;
 }

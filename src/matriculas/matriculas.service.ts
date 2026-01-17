@@ -372,6 +372,16 @@ export class MatriculasService {
     };
   }
 
+  async findByCurso(cursoId: string): Promise<Matricula[]> {
+    const matriculas = await this.matriculaRepository.find({
+      where: { curso_id: cursoId },
+      relations: ['estudiante', 'curso', 'periodo_lectivo'],
+      order: { estudiante: { nombres_completos: 'ASC' } }
+    });
+
+    return matriculas;
+  }  
+
   async update(id: string, updateMatriculaDto: UpdateMatriculaDto) {
     // ✅ USAR TRANSACCIÓN PARA GARANTIZAR CONSISTENCIA
     return await this.dataSource.transaction(async (manager) => {

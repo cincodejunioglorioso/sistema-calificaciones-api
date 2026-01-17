@@ -5,6 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { EstadoEstudiante, Estudiante } from './entities/estudiante.entity';
 import { Repository, DataSource } from 'typeorm';
 import { EstadoMatricula } from '../matriculas/entities/matricula.entity';
+import { UpdateDatosPersonalesDto } from './dto/update-datos-personales.dto';
 
 @Injectable()
 export class EstudiantesService {
@@ -52,7 +53,7 @@ export class EstudiantesService {
     incompletos?: boolean,
     search?: string,
     cursoId?: string,
-    nivelCurso?: string,  // ✅ NUEVO: Filtrar por nivel
+    nivelCurso?: string,
     periodoId?: string,
     page = 1,
     limit = 20
@@ -83,7 +84,6 @@ export class EstudiantesService {
       );
     }
 
-    // ✅ Filtro por curso específico (si se envía cursoId)
     if (cursoId) {
       query.andWhere(
         `EXISTS (
@@ -98,7 +98,6 @@ export class EstudiantesService {
       query.setParameter('estadoMatriculaActivo', EstadoMatricula.ACTIVO);
     }
 
-    // ✅ NUEVO: Filtro por NIVEL de curso (sin importar paralelo)
     if (nivelCurso) {
       query.andWhere(
         `EXISTS (
@@ -126,7 +125,6 @@ export class EstudiantesService {
       query.setParameter('periodoId', periodoId);
     }
 
-    // ✅ Query separado para contar
     const countQuery = this.estudianteRepository.createQueryBuilder('estudiante');
 
     if (estado) {
@@ -162,7 +160,6 @@ export class EstudiantesService {
       countQuery.setParameter('estadoMatriculaActivo', EstadoMatricula.ACTIVO);
     }
 
-    // ✅ NUEVO: Mismo filtro por nivel en count
     if (nivelCurso) {
       countQuery.andWhere(
         `EXISTS (
@@ -192,7 +189,6 @@ export class EstudiantesService {
 
     const total = await countQuery.getCount();
 
-    // ✅ Subquery para ordenamiento
     const subQuery = this.estudianteRepository
       .createQueryBuilder('e')
       .select('e.id')
@@ -231,7 +227,6 @@ export class EstudiantesService {
       subQuery.setParameter('estadoMatriculaActivo', EstadoMatricula.ACTIVO);
     }
 
-    // ✅ NUEVO: Mismo filtro por nivel en subquery
     if (nivelCurso) {
       subQuery.andWhere(
         `EXISTS (
@@ -310,7 +305,6 @@ export class EstudiantesService {
     return estudiante;
   }
 
-  // ✅ Buscar por cédula (usado en matrículas)
   async findByCedula(cedula: string): Promise<Estudiante | null> {
     return await this.estudianteRepository.findOne({
       where: { estudiante_cedula: cedula }
@@ -335,6 +329,18 @@ export class EstudiantesService {
     }
 
     Object.assign(estudiante, updateEstudianteDto);
+
+    return await this.estudianteRepository.save(estudiante);
+  }
+
+  async actualizarDatosPersonales(
+    id: string,
+    updateDatosPersonalesDto: UpdateDatosPersonalesDto,
+  ): Promise<Estudiante> {
+    const estudiante = await this.findOne(id);
+
+    // Actualizar solo campos permitidos (sin nombres, cédula, correo,  ni estado)
+    Object.assign(estudiante, updateDatosPersonalesDto);
 
     return await this.estudianteRepository.save(estudiante);
   }

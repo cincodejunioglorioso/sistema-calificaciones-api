@@ -1,5 +1,5 @@
 // nest-backend/src/materia-curso/materia-curso.service.ts
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateMateriaCursoDto } from './dto/create-materia-curso.dto';
 import { UpdateMateriaCursoDto } from './dto/update-materia-curso.dto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -128,13 +128,19 @@ export class MateriaCursoService {
     return materiasCursos;
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, docente_id?: string) {
     const materiaCurso = await this.materiaCursoRepository.findOne({
       where: { id },
+      relations: ['curso', 'curso.periodo_lectivo', 'materia', 'docente']
     });
 
     if (!materiaCurso) {
-      throw new BadRequestException('La materia del curso no existe');
+      throw new NotFoundException('Materia-Curso no encontrada');
+    }
+
+    // Si es docente (no admin), validar que sea su materia
+    if (docente_id && materiaCurso.docente_id !== docente_id) {
+      throw new ForbiddenException('No tienes acceso a esta materia');
     }
 
     return materiaCurso;
@@ -175,8 +181,14 @@ export class MateriaCursoService {
       throw new BadRequestException('El docente no existe');
     }
 
+    // 🆕 BUSCAR PERÍODO ACTIVO
+    const periodoActivo = await this.periodosLectivosService.findActivo();
+
     const materias = await this.materiaCursoRepository.find({
-      where: { docente_id: docente_id },
+      where: {
+        docente_id: docente_id,
+        periodo_lectivo_id: periodoActivo.id  // 🔥 FILTRAR POR PERÍODO ACTIVO
+      },
       order: {
         curso: {
           nivel: 'ASC',
@@ -190,6 +202,10 @@ export class MateriaCursoService {
         id: docente.id,
         nombres: docente.nombres,
         apellidos: docente.apellidos,
+      },
+      periodo: {
+        id: periodoActivo.id,
+        nombre: periodoActivo.nombre
       },
       totalMaterias: materias.length,
       materiasActivas: materias.filter((m) => m.estado === EstadoMateriaCurso.ACTIVO).length,

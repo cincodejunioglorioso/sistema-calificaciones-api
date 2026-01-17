@@ -12,6 +12,15 @@ import { CursosModule } from './cursos/cursos.module';
 import { EstudiantesModule } from './estudiantes/estudiantes.module';
 import { MateriaCursoModule } from './materia-curso/materia-curso.module';
 import { MatriculasModule } from './matriculas/matriculas.module';
+import { InsumosModule } from './insumos/insumos.module';
+import { TiposEvaluacionModule } from './tipos-evaluacion/tipos-evaluacion.module';
+import { CalificacionInsumoModule } from './calificacion_insumo/calificacion_insumo.module';
+import { RecuperacionInsumoModule } from './recuperacion_insumo/recuperacion_insumo.module';
+import { CalificacionProyectoModule } from './calificacion-proyecto/calificacion-proyecto.module';
+import { CalificacionExamenModule } from './calificacion-examen/calificacion-examen.module';
+import { PromedioTrimestreModule } from './promedio-trimestre/promedio-trimestre.module';
+import { PromedioPeriodoModule } from './promedio-periodo/promedio-periodo.module';
+import { ReportesModule } from './reportes/reportes.module';
 
 @Module({  
   imports: [
@@ -52,7 +61,25 @@ import { MatriculasModule } from './matriculas/matriculas.module';
 
     MateriaCursoModule,
 
-    MatriculasModule
+    MatriculasModule,
+
+    InsumosModule,
+
+    TiposEvaluacionModule,
+
+    CalificacionInsumoModule,
+
+    RecuperacionInsumoModule,
+
+    CalificacionProyectoModule,
+
+    CalificacionExamenModule,
+
+    PromedioTrimestreModule,
+
+    PromedioPeriodoModule,
+
+    ReportesModule
   ],
 })
 export class AppModule {} 

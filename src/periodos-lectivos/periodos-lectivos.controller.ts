@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TrimestresService } from '../trimestres/trimestres.service';
 
 @Controller('periodos-lectivos')
+@UseGuards(JwtAuthGuard)
 export class PeriodosLectivosController {
   constructor(
     private readonly periodosLectivosService: PeriodosLectivosService,
@@ -28,7 +29,6 @@ export class PeriodosLectivosController {
   }
   
   // 👑 ADMIN + 🎓 DOCENTE: Período activo
-  @UseGuards(JwtAuthGuard)
   @Get('/periodo-activo')
   findActivo() {
     return this.periodosLectivosService.findActivo();
@@ -48,7 +48,7 @@ export class PeriodosLectivosController {
     return this.periodosLectivosService.findOne(id);
   }
 
-  // 👑 ADMIN: Actualizar período
+  // 👑 ADMIN: Actualizar período (menos estado)
   @UseGuards(AdminGuard)
   @Put(':id')
   update(
@@ -58,10 +58,17 @@ export class PeriodosLectivosController {
     return this.periodosLectivosService.update(id, updatePeriodoLectivoDto);
   }
 
+  // 👑 ADMIN: Validar cierre de período
+  @UseGuards(AdminGuard)
+  @Post(':id/validar-cierre')
+  async validarCierre(@Param('id') id: string) {
+    return await this.periodosLectivosService.validarCierrePeriodo(id);
+  }
+
+  // 👑 ADMIN: Finalizar período lectivo (IRREVERSIBLE)
   @UseGuards(AdminGuard)
   @Patch(':id/cambiar-estado')
   cambiarEstado(@Param('id') id: string) {
     return this.periodosLectivosService.cambiarEstado(id);
   }
-
 }

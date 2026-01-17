@@ -5,7 +5,8 @@ export enum EstadoEstudiante {
     ACTIVO = 'ACTIVO',
     SIN_MATRICULA = 'SIN_MATRICULA',
     GRADUADO = 'GRADUADO',
-    RETIRADO = 'RETIRADO'
+    RETIRADO = 'RETIRADO',
+    INACTIVO_TEMPORAL = 'INACTIVO_TEMPORAL'
 }
 
 @Entity('estudiantes')

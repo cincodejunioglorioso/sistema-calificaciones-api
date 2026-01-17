@@ -13,25 +13,25 @@ import { UsuariosService } from '../usuarios/usuarios.service';
 
 @Injectable()
 export class CursosService {
-  constructor (
+  constructor(
     @InjectRepository(Curso)
     private readonly cursoRepository: Repository<Curso>,
     private readonly periodosLectivosService: PeriodosLectivosService,
     private readonly trimestresService: TrimestresService,
     private readonly docentesService: DocentesService,
-  ) {}
+  ) { }
 
   // 👑 ADMIN: Crear curso
   async create(createCursoDto: CreateCursoDto) {
     const periodo = await this.periodosLectivosService.findOne(createCursoDto.periodo_lectivo_id);
-    
+
     if (periodo.estado !== EstadoPeriodo.ACTIVO) {
       throw new BadRequestException('Solo se pueden crear cursos en períodos lectivos activos');
     }
 
     const trimestres = await this.trimestresService.findTrimestresByPeriodo(createCursoDto.periodo_lectivo_id);
     const trimestresFinalizados = trimestres.filter(t => t.estado === 'FINALIZADO');
-    
+
     if (trimestresFinalizados.length > 0) {
       throw new BadRequestException(
         `No se pueden crear cursos cuando ya hay ${trimestresFinalizados.length} trimestre(s) finalizado(s). ` +
@@ -60,60 +60,60 @@ export class CursosService {
     // Básica: solo BASICA
     const nivelesBasicos = [NivelCurso.OCTAVO, NivelCurso.NOVENO, NivelCurso.DECIMO];
     if (nivelesBasicos.includes(nivel) && especialidad !== EspecialidadCurso.BASICA) {
-        throw new BadRequestException(
-            `Los niveles ${nivel} solo pueden tener especialidad BÁSICA`
-        );
+      throw new BadRequestException(
+        `Los niveles ${nivel} solo pueden tener especialidad BÁSICA`
+      );
     }
 
     // Bachillerato: no puede ser BASICA
     const nivelesBachillerato = [
-        NivelCurso.PRIMERO_BACHILLERATO, 
-        NivelCurso.SEGUNDO_BACHILLERATO, 
-        NivelCurso.TERCERO_BACHILLERATO
+      NivelCurso.PRIMERO_BACHILLERATO,
+      NivelCurso.SEGUNDO_BACHILLERATO,
+      NivelCurso.TERCERO_BACHILLERATO
     ];
     if (nivelesBachillerato.includes(nivel) && especialidad === EspecialidadCurso.BASICA) {
-        throw new BadRequestException(
-            `Los niveles de bachillerato (${nivel}) deben tener especialidad TÉCNICO o CIENCIAS`
-        );
+      throw new BadRequestException(
+        `Los niveles de bachillerato (${nivel}) deben tener especialidad TÉCNICO o CIENCIAS`
+      );
     }
 
     const paraleloNuevo = createCursoDto.paralelo.toUpperCase();
-    
+
     // Obtener paralelos existentes para este nivel y especialidad
     const paralelosExistentes = await this.cursoRepository.find({
-        where: {
-            nivel: createCursoDto.nivel,
-            especialidad: createCursoDto.especialidad,
-            periodo_lectivo_id: createCursoDto.periodo_lectivo_id
-        },
-        select: ['paralelo'],
-        order: { paralelo: 'ASC' }
+      where: {
+        nivel: createCursoDto.nivel,
+        especialidad: createCursoDto.especialidad,
+        periodo_lectivo_id: createCursoDto.periodo_lectivo_id
+      },
+      select: ['paralelo'],
+      order: { paralelo: 'ASC' }
     });
 
     if (paralelosExistentes.length > 0) {
-        const paralelos = paralelosExistentes.map(p => p.paralelo).sort();
-        const ultimoParalelo = paralelos[paralelos.length - 1];
-        const siguienteParaleloEsperado = String.fromCharCode(ultimoParalelo.charCodeAt(0) + 1);
+      const paralelos = paralelosExistentes.map(p => p.paralelo).sort();
+      const ultimoParalelo = paralelos[paralelos.length - 1];
+      const siguienteParaleloEsperado = String.fromCharCode(ultimoParalelo.charCodeAt(0) + 1);
 
-        if (paraleloNuevo !== siguienteParaleloEsperado) {
-            throw new BadRequestException(
-                `El próximo paralelo para ${createCursoDto.nivel} ${createCursoDto.especialidad} debe ser "${siguienteParaleloEsperado}". ` +
-                `Paralelos existentes: ${paralelos.join(', ')}`
-            );
-        }
+      if (paraleloNuevo !== siguienteParaleloEsperado) {
+        throw new BadRequestException(
+          `El próximo paralelo para ${createCursoDto.nivel} ${createCursoDto.especialidad} debe ser "${siguienteParaleloEsperado}". ` +
+          `Paralelos existentes: ${paralelos.join(', ')}`
+        );
+      }
     } else {
-        // Primer paralelo debe ser 'A'
-        if (paraleloNuevo !== 'A') {
-            throw new BadRequestException(
-                `El primer paralelo debe ser "A" para ${createCursoDto.nivel} ${createCursoDto.especialidad}`
-            );
-        }
+      // Primer paralelo debe ser 'A'
+      if (paraleloNuevo !== 'A') {
+        throw new BadRequestException(
+          `El primer paralelo debe ser "A" para ${createCursoDto.nivel} ${createCursoDto.especialidad}`
+        );
+      }
     }
 
     // 🆕 VALIDAR DOCENTE SI SE PROPORCIONA
     if (createCursoDto.docente_id) {
       const docente = await this.docentesService.findOne(createCursoDto.docente_id);
-      
+
       if (docente.usuario_id.estado !== Estado.ACTIVO) {
         throw new BadRequestException('Solo se pueden asignar docentes activos como tutores');
       }
@@ -150,13 +150,17 @@ export class CursosService {
 
   // 👑 ADMIN: Listar todos los cursos del período activo
   async findAll() {
-    const periodoActivo = await this.periodosLectivosService.findActivo();
-    
-    return await this.cursoRepository.find({
-      where: { periodo_lectivo_id: periodoActivo.id },
-      order: { nivel: 'ASC', paralelo: 'ASC' },
-      relations: ['docente']
-    });
+    try {
+      const periodoActivo = await this.periodosLectivosService.findActivo();
+
+      return await this.cursoRepository.find({
+        where: { periodo_lectivo_id: periodoActivo.id },
+        order: { nivel: 'ASC', paralelo: 'ASC' },
+        relations: ['docente']
+      });
+    } catch (error) {
+      return [];
+    }
   }
 
   // 👑 ADMIN: Cursos por período específico
@@ -170,24 +174,24 @@ export class CursosService {
   // 👑 ADMIN: Cursos por nivel
   async findByNivel(nivelUrl: string) {
     const nivel = getNivelFromUrl(nivelUrl);
-        
+
     if (!nivel) {
-        throw new BadRequestException(
-            `Nivel no válido. Opciones: octavo, noveno, decimo, primero-bachillerato, segundo-bachillerato, tercero-bachillerato`
-        );
+      throw new BadRequestException(
+        `Nivel no válido. Opciones: octavo, noveno, decimo, primero-bachillerato, segundo-bachillerato, tercero-bachillerato`
+      );
     }
 
     const periodoActivo = await this.periodosLectivosService.findActivo();
-    
+
     return await this.cursoRepository.find({
-      where: { 
+      where: {
         nivel: nivel,
         periodo_lectivo_id: periodoActivo.id,
         estado: EstadoCurso.ACTIVO
       },
       order: { paralelo: 'ASC' }
     });
-  }  
+  }
 
   // 👑 ADMIN: Curso específico
   async findOne(id: string) {
@@ -216,7 +220,7 @@ export class CursosService {
     if (updateCursoDto.docente_id !== undefined) {
       if (updateCursoDto.docente_id) {
         const docente = await this.docentesService.findOne(updateCursoDto.docente_id);
-        
+
         if (docente.usuario_id.estado !== Estado.ACTIVO) {
           throw new BadRequestException('Solo se pueden asignar docentes activos como tutores');
         }
@@ -305,8 +309,8 @@ export class CursosService {
   }
 
   async actualizarContadorEstudiantes(cursoId: string, cantidad: number): Promise<void> {
-      await this.cursoRepository.update(cursoId, {
-        estudiantes_matriculados: cantidad
+    await this.cursoRepository.update(cursoId, {
+      estudiantes_matriculados: cantidad
     });
   }
 }

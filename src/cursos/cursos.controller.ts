@@ -6,6 +6,7 @@ import { AdminGuard } from '../auth/guards/admin.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('cursos')
+@UseGuards(JwtAuthGuard)
 export class CursosController {
   constructor(private readonly cursosService: CursosService) {}
 
@@ -16,29 +17,25 @@ export class CursosController {
     return this.cursosService.create(createCursoDto);
   }
 
-  // 👑 ADMIN: Listar cursos del período activo
-  @UseGuards(JwtAuthGuard)
+  // 👑 ADMIN + DOCENTE: Listar cursos del período activo
   @Get()
   findAll() {
     return this.cursosService.findAll();
   }
 
   // 👑 ADMIN: Cursos por período específico
-  @UseGuards(JwtAuthGuard)
   @Get('periodo/:id')
   findByPeriodo(@Param('id') id: string) {
     return this.cursosService.findByPeriodo(id);
   }
 
   // 👑 ADMIN: Cursos por nivel
-  @UseGuards(JwtAuthGuard)
   @Get('nivel/:nivel')
   findByNivel(@Param('nivel') nivel: string) {
     return this.cursosService.findByNivel(nivel);
   }
 
   // 👑 ADMIN: Cursos especifico
-  @UseGuards(JwtAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.cursosService.findOne(id);

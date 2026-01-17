@@ -4,8 +4,10 @@ import { CreateTrimestreDto } from './dto/create-trimestre.dto';
 import { UpdateTrimestreDto } from './dto/update-trimestre.dto';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { DocenteGuard } from '../auth/guards/docente.guard';
 
 @Controller('trimestres')
+@UseGuards(JwtAuthGuard)
 export class TrimestresController {
   constructor(private readonly trimestresService: TrimestresService) {}
 
@@ -24,7 +26,7 @@ export class TrimestresController {
   }
 
   // 👑 ADMIN: Ver trimestres de un período específico
-  @UseGuards(AdminGuard)
+  @UseGuards(JwtAuthGuard)
   @Get('periodo/:periodoId')
   findTrimestresByPeriodo(@Param('periodoId') periodoId: string) {
     return this.trimestresService.findTrimestresByPeriodo(periodoId);
@@ -42,5 +44,12 @@ export class TrimestresController {
   @Put(':id')
   update(@Param('id') id: string, @Body() updateTrimestreDto: UpdateTrimestreDto) {
     return this.trimestresService.update(id, updateTrimestreDto);
+  }
+
+  // 👑 ADMIN: Validar si se puede cerrar un trimestre
+  @UseGuards(AdminGuard)
+  @Post(':id/validar-cierre')
+  async validarCierre(@Param('id') id: string) {
+    return await this.trimestresService.validarCierreTrimestre(id);
   }
 }

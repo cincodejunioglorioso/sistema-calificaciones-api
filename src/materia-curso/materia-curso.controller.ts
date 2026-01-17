@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Put } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Put, Req } from '@nestjs/common';
 import { MateriaCursoService } from './materia-curso.service';
 import { CreateMateriaCursoDto } from './dto/create-materia-curso.dto';
 import { UpdateMateriaCursoDto } from './dto/update-materia-curso.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
+import { DocenteGuard } from '../auth/guards/docente.guard';
 
 @Controller('materia-curso')
 @UseGuards(JwtAuthGuard)
@@ -22,10 +23,10 @@ export class MateriaCursoController {
     return this.materiaCursoService.findAll();
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(DocenteGuard)
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.materiaCursoService.findOne(id);
+  findOne(@Param('id') id: string, @Req() req) {
+    return this.materiaCursoService.findOne(id, req.user.docente_id);
   }
 
   @UseGuards(AdminGuard)
@@ -34,7 +35,7 @@ export class MateriaCursoController {
     return this.materiaCursoService.findByCurso(curso_id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(DocenteGuard)
   @Get('docente/:docente_id')
   findByDocente(@Param('docente_id') docente_id: string) {
     return this.materiaCursoService.findByDocente(docente_id);

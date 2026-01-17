@@ -4,8 +4,12 @@ import { CreateEstudianteDto } from './dto/create-estudiante.dto';
 import { UpdateEstudianteDto } from './dto/update-estudiante.dto';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { EstadoEstudiante } from './entities/estudiante.entity';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { TutorGuard } from '../auth/guards/tutor.guard';
+import { UpdateDatosPersonalesDto } from './dto/update-datos-personales.dto';
 
 @Controller('estudiantes')
+@UseGuards(JwtAuthGuard)
 export class EstudiantesController {
   constructor(private readonly estudiantesService: EstudiantesService) {}
 
@@ -22,7 +26,6 @@ export class EstudiantesController {
     @Query('limit') limit = 20,
   ) {
 
-    console.log('📥 Parámetros recibidos:', { estado, cursoId, nivelCurso, periodoId, incompletos, search });
     const mostrarIncompletos = incompletos === 'true' ? true : incompletos === 'false' ? false : undefined;
 
     return this.estudiantesService.findAll(
@@ -53,6 +56,15 @@ export class EstudiantesController {
   @Put(':id')
   update(@Param('id') id: string, @Body() updateEstudianteDto: UpdateEstudianteDto) {
     return this.estudiantesService.update(id, updateEstudianteDto);
+  }
+
+  @UseGuards(TutorGuard)
+  @Put(':id/datos-personales')
+  actualizarDatosPersonales(
+    @Param('id') id: string,
+    @Body() updateDatosPersonalesDto: UpdateDatosPersonalesDto,
+  ) {
+    return this.estudiantesService.actualizarDatosPersonales(id, updateDatosPersonalesDto);
   }
 
   @UseGuards(AdminGuard)
