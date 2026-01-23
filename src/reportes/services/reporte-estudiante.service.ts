@@ -1,24 +1,29 @@
+// nest-backend/src/reportes/services/reporte-estudiante.service.ts
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PromedioTrimestre } from '../../promedio-trimestre/entities/promedio-trimestre.entity';
 import { PromedioPeriodo } from '../../promedio-periodo/entities/promedio-periodo.entity';
 import { Trimestre } from '../../trimestres/entities/trimestre.entity';
-import { Matricula } from '../../matriculas/entities/matricula.entity';
-import { CalificacionCualitativa } from '../../common/enums/cualitativa.enum';
-import { calcularCalificacionCualitativa } from '../../common/constants/escalas.constants';
+import { Matricula, EstadoMatricula } from '../../matriculas/entities/matricula.entity';
+import { ConversionCualitativa, CalificacionComponente } from '../../common/enums/cualitativa.enum';
+import { calcularConversionCualitativa } from '../../common/constants/escalas.constants';
 import { EstudiantesService } from '../../estudiantes/estudiantes.service';
 import { TrimestresService } from '../../trimestres/trimestres.service';
 import { PromedioTrimestreService } from '../../promedio-trimestre/promedio-trimestre.service';
 import { CursosService } from '../../cursos/cursos.service';
+import { CalificacionCualitativaService } from '../../calificacion-cualitativa/calificacion-cualitativa.service'; // 🆕
+import { NivelEducativo } from '../../materias/entities/materia.entity'; // 🆕
 import {
   DatosLibretaEstudiante,
   CalificacionesTrimestreLibreta,
   CalificacionMateriaLibreta,
-  PromedioAnualMateria
+  PromedioAnualMateria,
+  ComponentesCualitativosLibreta,
+  ComponenteCualitativoLibreta,
+  ComponenteCualitativoData,
 } from '../interfaces/datos-libreta.interface';
-import { NombreTrimestre, TrimestreEstado } from '../../trimestres/entities/trimestre.entity';
-import { EstadoMatricula } from '../../matriculas/entities/matricula.entity';
+import { NombreTrimestre } from '../../trimestres/entities/trimestre.entity';
 
 @Injectable()
 export class ReporteEstudianteService {
@@ -35,6 +40,7 @@ export class ReporteEstudianteService {
     private readonly trimestresService: TrimestresService,
     private readonly promedioTrimestreService: PromedioTrimestreService,
     private readonly cursosService: CursosService,
+    private readonly calificacionCualitativaService: CalificacionCualitativaService, // 🆕
   ) { }
 
   /**
@@ -52,7 +58,7 @@ export class ReporteEstudianteService {
     // 2. Obtener trimestre solicitado
     const trimestreActual = await this.trimestresService.findOne(trimestre_id);
 
-    // 3. Obtener matrícula activa del estudiante en este período (usando repository directo)
+    // 3. Obtener matrícula activa del estudiante en este período
     const matricula = await this.matriculaRepository.findOne({
       where: {
         estudiante_id: estudiante_id,
@@ -68,17 +74,17 @@ export class ReporteEstudianteService {
       );
     }
 
-    // 4. Verificar permisos (si se proporcionó docente_id, debe ser tutor del curso)
+    // 4. Verificar permisos
     if (docente_id) {
       await this.verificarPermisoTutor(docente_id, matricula.curso_id);
     }
 
-    // 5. Obtener todos los trimestres del período (ordenados)
+    // 5. Obtener todos los trimestres del período
     const todosLosTrimestres = await this.trimestresService.findTrimestresByPeriodo(
       trimestreActual.periodo_lectivo_id
     );
 
-    // 6. Determinar qué trimestres mostrar (hasta el trimestre solicitado)
+    // 6. Determinar qué trimestres mostrar
     const numeroTrimestreActual = this.getNumeroTrimestre(trimestreActual.nombre);
     const trimestresAMostrar = todosLosTrimestres
       .filter(t => this.getNumeroTrimestre(t.nombre) <= numeroTrimestreActual)
@@ -107,13 +113,12 @@ export class ReporteEstudianteService {
           cualitativa: cal.cualitativa,
         }));
 
-        // Calcular promedio general del trimestre
         const promedio_general = materias.length > 0
           ? materias.reduce((sum, m) => sum + m.nota_final, 0) / materias.length
           : null;
 
         const cualitativa_general = promedio_general
-          ? calcularCalificacionCualitativa(promedio_general)
+          ? calcularConversionCualitativa(promedio_general)
           : null;
 
         return {
@@ -128,13 +133,11 @@ export class ReporteEstudianteService {
     );
 
     // 8. Obtener promedios anuales SOLO si los 3 trimestres están completos
-    // Los promedios anuales se LEEN de la tabla promedio_periodo (no se calculan aquí)
     let promedios_anuales: PromedioAnualMateria[] | null = null;
     let promedio_general_anual: number | null = null;
-    let cualitativa_general_anual: CalificacionCualitativa | null = null;
+    let cualitativa_general_anual: ConversionCualitativa | null = null;
 
     if (trimestresConCalificaciones.length === 3) {
-      // Buscar promedios anuales en la tabla promedio_periodo
       promedios_anuales = await this.obtenerPromediosAnuales(
         estudiante_id,
         trimestreActual.periodo_lectivo_id
@@ -143,11 +146,19 @@ export class ReporteEstudianteService {
       if (promedios_anuales && promedios_anuales.length > 0) {
         promedio_general_anual = promedios_anuales.reduce((sum, m) => sum + m.promedio_anual, 0) / promedios_anuales.length;
         promedio_general_anual = Math.round(promedio_general_anual * 100) / 100;
-        cualitativa_general_anual = calcularCalificacionCualitativa(promedio_general_anual);
+        cualitativa_general_anual = calcularConversionCualitativa(promedio_general_anual);
       }
     }
 
-    // 9. Construir respuesta
+    // 🆕 9. Obtener componentes cualitativos reales
+    const componentes_cualitativos = await this.obtenerComponentesCualitativos(
+      estudiante_id,
+      matricula.curso_id,
+      trimestreActual.periodo_lectivo_id,
+      matricula.curso.nivel
+    );
+
+    // 10. Construir respuesta
     return {
       estudiante: {
         id: estudiante.id,
@@ -168,44 +179,131 @@ export class ReporteEstudianteService {
       promedios_anuales,
       promedio_general_anual,
       cualitativa_general_anual,
+      componentes_cualitativos, // 🆕
     };
   }
 
   /**
+   * 🆕 OBTENER COMPONENTES CUALITATIVOS REALES (DINÁMICO)
+   */
+  private async obtenerComponentesCualitativos(
+    estudiante_id: string,
+    curso_id: string,
+    periodo_lectivo_id: string,
+    nivelCurso: string
+  ): Promise<ComponentesCualitativosLibreta> {
+    // Determinar nivel educativo
+    const nivelesBasicos = ['OCTAVO', 'NOVENO', 'DECIMO', 'BÁSICA', 'BASICA'];
+    const nivelEducativo = nivelesBasicos.some(n => nivelCurso.toUpperCase().includes(n))
+      ? NivelEducativo.BASICA
+      : NivelEducativo.BACHILLERATO;
+
+    // Obtener componentes según nivel (incluye GENERAL automáticamente)
+    const componentesDisponibles = await this.calificacionCualitativaService.obtenerComponentesPorNivel(nivelEducativo);
+
+    // Obtener todas las calificaciones del estudiante en este período
+    const calificaciones = await this.calificacionCualitativaService.findByEstudiantePeriodo(
+      estudiante_id,
+      periodo_lectivo_id
+    );
+
+    // Construir array de componentes dinámico
+    const componentes: ComponenteCualitativoData[] = [];
+
+    for (const componente of componentesDisponibles) {
+      const calificacionesPorTrimestre = calificaciones.filter(
+        cal => cal.materia_id === componente.id
+      );
+
+      // Ordenar por trimestre
+      const trim1 = calificacionesPorTrimestre.find(c => this.getNumeroTrimestre(c.trimestre.nombre) === 1);
+      const trim2 = calificacionesPorTrimestre.find(c => this.getNumeroTrimestre(c.trimestre.nombre) === 2);
+      const trim3 = calificacionesPorTrimestre.find(c => this.getNumeroTrimestre(c.trimestre.nombre) === 3);
+
+      // Calcular promedio anual (MODA) solo si hay 3 trimestres
+      let promedio_anual: CalificacionComponente | null = null;
+      if (trim1 && trim2 && trim3) {
+        promedio_anual = await this.calificacionCualitativaService.calcularPromedioAnual(
+          estudiante_id,
+          componente.id,
+          periodo_lectivo_id
+        );
+      }
+
+      // ✅ Determinar si es "Comportamiento" para separar en el PDF
+      const nombreLower = componente.nombre.toLowerCase();
+      const esComportamiento = nombreLower.includes('comportamiento');
+
+      componentes.push({
+        materia_id: componente.id,
+        materia_nombre: componente.nombre,
+        es_comportamiento: esComportamiento,
+        calificaciones: {
+          trimestre_1: trim1?.calificacion ?? null,
+          trimestre_2: trim2?.calificacion ?? null,
+          trimestre_3: trim3?.calificacion ?? null,
+          promedio_anual,
+        },
+      });
+    }
+
+    // ✅ Ordenar: Comportamiento primero, luego alfabéticamente
+    componentes.sort((a, b) => {
+      if (a.es_comportamiento && !b.es_comportamiento) return -1;
+      if (!a.es_comportamiento && b.es_comportamiento) return 1;
+      return a.materia_nombre.localeCompare(b.materia_nombre);
+    });
+
+    return { componentes };
+  }
+
+  /**
    * Obtiene los promedios anuales DESDE la tabla promedio_periodo
-   * (NO los calcula, solo los lee si ya existen)
    */
   private async obtenerPromediosAnuales(
     estudiante_id: string,
     periodo_lectivo_id: string
   ): Promise<PromedioAnualMateria[] | null> {
-    const promediosPeriodo = await this.promedioPeriodoRepository.find({
-      where: {
-        estudiante_id,
-        periodo_lectivo_id
-      },
-      relations: ['materia_curso', 'materia_curso.materia']
+    const promedios = await this.promedioPeriodoRepository.find({
+      where: { estudiante_id, periodo_lectivo_id },
+      relations: ['materia_curso', 'materia_curso.materia'],
+      order: {
+        materia_curso: { materia: { nombre: 'ASC' } }
+      }
     });
 
-    if (!promediosPeriodo || promediosPeriodo.length === 0) {
+    if (promedios.length === 0) {
       return null;
     }
 
-    return promediosPeriodo.map(promedio => ({
-      materia_nombre: promedio.materia_curso.materia.nombre,
-      promedio_anual: Number(promedio.promedio_anual),
-      cualitativa: promedio.cualitativa_anual,
-    })).sort((a, b) => a.materia_nombre.localeCompare(b.materia_nombre));
+    return promedios.map(p => {
+      // ✅ LÓGICA DE SUPLETORIO: Si aprobó con supletorio (>= 7), mostrar 7.00
+      let nota_para_libreta = p.promedio_anual;
+
+      if (p.nota_supletorio !== null && p.promedio_final !== null) {
+        // Tiene supletorio registrado
+        nota_para_libreta = p.promedio_final >= 7.0 ? 7.0 : p.promedio_final;
+      }
+
+      return {
+        materia_nombre: p.materia_curso.materia.nombre,
+        promedio_anual: Number(p.promedio_anual),
+        cualitativa: p.cualitativa_anual,
+        // 🆕 CAMPOS DE SUPLETORIO
+        nota_supletorio: p.nota_supletorio ? Number(p.nota_supletorio) : null,
+        promedio_final: p.promedio_final ? Number(p.promedio_final) : null,
+        cualitativa_final: p.cualitativa_final || null,
+      };
+    });
   }
 
   /**
- * 🆕 NUEVO: Obtiene datos de libreta usando matricula_id específico
- * Permite generar reportes históricos sin filtrar por estado ACTIVO
- */
+   * 🆕 NUEVO: Obtiene datos de libreta usando matricula_id específico
+   */
   async obtenerDatosLibretaPorMatricula(
     matricula_id: string
   ): Promise<DatosLibretaEstudiante> {
-    // 1. Obtener matrícula con todas sus relaciones (SIN filtrar por estado)
+    // 1. Obtener matrícula con todas sus relaciones
     const matricula = await this.matriculaRepository.findOne({
       where: { id: matricula_id },
       relations: ['estudiante', 'curso', 'periodo_lectivo']
@@ -220,7 +318,6 @@ export class ReporteEstudianteService {
       matricula.periodo_lectivo_id
     );
 
-    // Ordenar trimestres
     const trimestresOrdenados = todosLosTrimestres.sort(
       (a, b) => this.getNumeroTrimestre(a.nombre) - this.getNumeroTrimestre(b.nombre)
     );
@@ -248,13 +345,12 @@ export class ReporteEstudianteService {
           cualitativa: cal.cualitativa,
         }));
 
-        // Calcular promedio general del trimestre
         const promedio_general = materias.length > 0
           ? materias.reduce((sum, m) => sum + m.nota_final, 0) / materias.length
           : null;
 
         const cualitativa_general = promedio_general
-          ? calcularCalificacionCualitativa(promedio_general)
+          ? calcularConversionCualitativa(promedio_general)
           : null;
 
         return {
@@ -271,7 +367,7 @@ export class ReporteEstudianteService {
     // 4. Obtener promedios anuales si existen
     let promedios_anuales: PromedioAnualMateria[] | null = null;
     let promedio_general_anual: number | null = null;
-    let cualitativa_general_anual: CalificacionCualitativa | null = null;
+    let cualitativa_general_anual: ConversionCualitativa | null = null;
 
     if (trimestresConCalificaciones.length === 3) {
       promedios_anuales = await this.obtenerPromediosAnuales(
@@ -282,11 +378,19 @@ export class ReporteEstudianteService {
       if (promedios_anuales && promedios_anuales.length > 0) {
         promedio_general_anual = promedios_anuales.reduce((sum, m) => sum + m.promedio_anual, 0) / promedios_anuales.length;
         promedio_general_anual = Math.round(promedio_general_anual * 100) / 100;
-        cualitativa_general_anual = calcularCalificacionCualitativa(promedio_general_anual);
+        cualitativa_general_anual = calcularConversionCualitativa(promedio_general_anual);
       }
     }
 
-    // 5. Construir respuesta
+    // 🆕 5. Obtener componentes cualitativos
+    const componentes_cualitativos = await this.obtenerComponentesCualitativos(
+      matricula.estudiante_id,
+      matricula.curso_id,
+      matricula.periodo_lectivo_id,
+      matricula.curso.nivel
+    );
+
+    // 6. Construir respuesta
     return {
       estudiante: {
         id: matricula.estudiante.id,
@@ -307,6 +411,7 @@ export class ReporteEstudianteService {
       promedios_anuales,
       promedio_general_anual,
       cualitativa_general_anual,
+      componentes_cualitativos, // 🆕
     };
   }
 

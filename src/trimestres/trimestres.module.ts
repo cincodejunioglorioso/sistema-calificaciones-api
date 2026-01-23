@@ -12,6 +12,8 @@ import { MateriaCurso } from '../materia-curso/entities/materia-curso.entity';
 import { PromedioTrimestreModule } from '../promedio-trimestre/promedio-trimestre.module';
 import { InsumosModule } from '../insumos/insumos.module';
 import { PromedioPeriodoModule } from '../promedio-periodo/promedio-periodo.module';
+import { Curso } from '../cursos/entities/curso.entity';
+import { CalificacionCualitativaModule } from '../calificacion-cualitativa/calificacion-cualitativa.module';
 
 @Module({
   imports: [
@@ -21,12 +23,14 @@ import { PromedioPeriodoModule } from '../promedio-periodo/promedio-periodo.modu
       CalificacionExamen,
       CalificacionProyecto,
       Matricula,
-      MateriaCurso
+      MateriaCurso,
+      Curso
     ]),
     forwardRef(() => PeriodosLectivosModule),
     forwardRef(() => InsumosModule),
     forwardRef(() => PromedioTrimestreModule),
     forwardRef(() => PromedioPeriodoModule),
+    forwardRef(() => CalificacionCualitativaModule),
   ],
   controllers: [TrimestresController],
   providers: [TrimestresService],

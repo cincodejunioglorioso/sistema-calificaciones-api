@@ -7,11 +7,9 @@ export enum NivelEducativo {
     GENERAL = 'GENERAL',
 }
 
-export enum TrimestreAplicable {
-    TODOS = 'TODOS',
-    PRIMERO = 'PRIMERO',
-    SEGUNDO = 'SEGUNDO',
-    TERCERO = 'TERCERO',
+export enum TipoCalificacion {
+    CUALITATIVA = 'CUALITATIVA',
+    CUANTITATIVA = 'CUANTITATIVA',
 }
 
 export enum EstadoMateria {
@@ -31,8 +29,8 @@ export class Materia {
     @Column({ type: 'enum', enum: NivelEducativo })
     nivelEducativo: NivelEducativo;
 
-    @Column({ type: 'enum', enum: TrimestreAplicable })
-    trimestreAplicable: TrimestreAplicable;
+    @Column({ type: 'enum', enum: TipoCalificacion })
+    tipoCalificacion: TipoCalificacion;
 
     @Column({ type: 'enum', enum: EstadoMateria, default: EstadoMateria.ACTIVO })
     estado: EstadoMateria;

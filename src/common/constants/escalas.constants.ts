@@ -1,4 +1,4 @@
-import { CalificacionCualitativa } from "../enums/cualitativa.enum";
+import { ConversionCualitativa } from "../enums/cualitativa.enum";
 
 export const ESCALA_CUALITATIVA = {
     DA: { min: 9.00, max: 10.0, descripcion: 'Domina los aprendizajes requeridos' },
@@ -7,9 +7,9 @@ export const ESCALA_CUALITATIVA = {
     NA: { min: 0.00, max: 4.00, descripcion: 'No alcanza los aprendizajes requeridos' }
 } as const;
 
-export function calcularCalificacionCualitativa(nota: number): CalificacionCualitativa {
-    if (nota >= ESCALA_CUALITATIVA.DA.min) return CalificacionCualitativa.DA;
-    if (nota >= ESCALA_CUALITATIVA.AA.min) return CalificacionCualitativa.AA;
-    if (nota >= ESCALA_CUALITATIVA.PA.min) return CalificacionCualitativa.PA;
-    return CalificacionCualitativa.NA;
+export function calcularConversionCualitativa(nota: number): ConversionCualitativa {
+    if (nota >= ESCALA_CUALITATIVA.DA.min) return ConversionCualitativa.DA;
+    if (nota >= ESCALA_CUALITATIVA.AA.min) return ConversionCualitativa.AA;
+    if (nota >= ESCALA_CUALITATIVA.PA.min) return ConversionCualitativa.PA;
+    return ConversionCualitativa.NA;
 }

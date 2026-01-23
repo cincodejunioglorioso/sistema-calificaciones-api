@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, forwardRef, Inject, Injectable,
 import { CreatePeriodoLectivoDto } from './dto/create-periodos-lectivo.dto';
 import { UpdatePeriodoLectivoDto } from './dto/update-periodos-lectivo.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EstadoPeriodo, PeriodoLectivo } from './entities/periodos-lectivo.entity';
+import { EstadoPeriodo, EstadoSupletorio, PeriodoLectivo } from './entities/periodos-lectivo.entity';
 import { Not, Repository, DataSource } from 'typeorm';
 import { TrimestresService } from '../trimestres/trimestres.service';
 import { EstadoMatricula, Matricula } from '../matriculas/entities/matricula.entity';
@@ -11,6 +11,8 @@ import { EstadoEstudiante, Estudiante } from '../estudiantes/entities/estudiante
 import { TrimestreEstado } from '../trimestres/entities/trimestre.entity';
 import { PromedioPeriodoService } from '../promedio-periodo/promedio-periodo.service';
 import { EstadoMateriaCurso, MateriaCurso } from '../materia-curso/entities/materia-curso.entity';
+import { EstadoPromedioAnual, PromedioPeriodo } from '../promedio-periodo/entities/promedio-periodo.entity';
+import { TipoCalificacion } from '../materias/entities/materia.entity';
 
 @Injectable()
 export class PeriodosLectivosService {
@@ -18,6 +20,8 @@ export class PeriodosLectivosService {
   constructor(
     @InjectRepository(PeriodoLectivo)
     private readonly periodoLectivoRepository: Repository<PeriodoLectivo>,
+    @InjectRepository(PromedioPeriodo)
+    private readonly promedioPeriodoRepository: Repository<PromedioPeriodo>,
     @Inject(forwardRef(() => TrimestresService))
     private readonly trimestresService: TrimestresService,
     @Inject(forwardRef(() => PromedioPeriodoService))
@@ -198,8 +202,8 @@ export class PeriodosLectivosService {
   async validarCierrePeriodo(id: string) {
     const periodo = await this.findOne(id);
 
-    if (periodo.estado !== EstadoPeriodo.ACTIVO) {
-      throw new BadRequestException('El período lectivo no está activo');
+    if (periodo.estado === EstadoPeriodo.FINALIZADO) {
+      throw new BadRequestException('El período ya está finalizado');
     }
 
     // Validar que los 3 trimestres estén FINALIZADOS
@@ -254,19 +258,222 @@ export class PeriodosLectivosService {
     };
   }
 
-  // 👑 ADMIN: Cambiar estado de período lectivo ACTIVO -> FINALIZADO
-  async cambiarEstado(id: string) {
-    const periodo = await this.findOne(id);
+  // 👑 ADMIN: Finalizar período (ACTIVO → FINALIZADO)
+  async cambiarEstado(periodo_id: string) {
+    const periodo = await this.findOne(periodo_id);
 
     if (periodo.estado === EstadoPeriodo.FINALIZADO) {
+      throw new BadRequestException('El período ya está finalizado');
+    }
+
+    // Validar que los 3 trimestres estén finalizados
+    const trimestres = await this.trimestresService.findTrimestresByPeriodo(periodo_id);
+    const trimestresFinalizados = trimestres.filter(t => t.estado === TrimestreEstado.FINALIZADO);
+
+    if (trimestresFinalizados.length !== 3) {
       throw new BadRequestException(
-        'No se puede reactivar un período finalizado. Los datos académicos están cerrados permanentemente. ' +
-        'Debe crear un nuevo período lectivo.'
+        `Debe finalizar los 3 trimestres antes de cerrar el período. Finalizados: ${trimestresFinalizados.length}/3`
       );
     }
 
-    return await this.finalizarPeriodoLectivo(id);
+    // ✅ Validar que la fase de supletorios esté CERRADA
+    if (periodo.estado_supletorio !== EstadoSupletorio.CERRADO) {
+      throw new BadRequestException(
+        `Debe cerrar la fase de supletorios antes de finalizar el período. Fase actual: ${periodo.estado_supletorio}`
+      );
+    }
+
+    // Finalizar
+    periodo.estado = EstadoPeriodo.FINALIZADO;
+    await this.periodoLectivoRepository.save(periodo);
+
+    return {
+      message: `Período ${periodo.nombre} finalizado exitosamente`,
+      periodo
+    };
   }
+
+  // 👑 ADMIN: Activar fase de supletorios
+  async activarSupletorios(periodo_id: string) {
+    const periodo = await this.findOne(periodo_id);
+
+    // Validar que esté en estado ACTIVO
+    if (periodo.estado !== EstadoPeriodo.ACTIVO) {
+      throw new BadRequestException(
+        `El período debe estar ACTIVO para activar supletorios. Estado actual: ${periodo.estado}`
+      );
+    }
+
+    // Validar que NO esté ya en proceso de supletorios
+    if (periodo.estado_supletorio !== EstadoSupletorio.PENDIENTE) {
+      throw new BadRequestException(
+        `Los supletorios ya están en fase ${periodo.estado_supletorio}`
+      );
+    }
+
+    // Validar que los 3 trimestres estén FINALIZADO
+    const trimestres = await this.trimestresService.findTrimestresByPeriodo(periodo_id);
+
+    if (trimestres.length !== 3) {
+      throw new BadRequestException('El período debe tener exactamente 3 trimestres');
+    }
+
+    const trimestresNoFinalizados = trimestres.filter(t => t.estado !== TrimestreEstado.FINALIZADO);
+
+    if (trimestresNoFinalizados.length > 0) {
+      throw new BadRequestException(
+        `Los siguientes trimestres no están finalizados: ${trimestresNoFinalizados.map(t => t.nombre).join(', ')}`
+      );
+    }
+
+    // Validar que existan promedios anuales generados
+    const promediosCount = await this.promedioPeriodoRepository.count({
+      where: { periodo_lectivo_id: periodo_id }
+    });
+
+    if (promediosCount === 0) {
+      throw new BadRequestException(
+        'No hay promedios anuales generados. Primero debe finalizar el tercer trimestre y generar los promedios.'
+      );
+    }
+
+    // Contar estudiantes que necesitan supletorio
+    const estudiantesSupletorio = await this.promedioPeriodoRepository
+      .createQueryBuilder('pp')
+      .innerJoin('pp.materia_curso', 'mc')
+      .innerJoin('mc.materia', 'm')
+      .where('pp.periodo_lectivo_id = :periodo_id', { periodo_id })
+      .andWhere('pp.promedio_anual < 7.0')
+      .andWhere('m.tipoCalificacion = :tipo', { tipo: TipoCalificacion.CUANTITATIVA })
+      .getCount();
+
+    // ✅ Cambiar SOLO la fase de supletorio (estado sigue ACTIVO)
+    periodo.estado_supletorio = EstadoSupletorio.ACTIVADO;
+    await this.periodoLectivoRepository.save(periodo);
+
+    return {
+      message: 'Fase de supletorios activada exitosamente',
+      periodo,
+      estadisticas: {
+        total_promedios_generados: promediosCount,
+        total_estudiantes_en_supletorio: estudiantesSupletorio,
+        advertencia: 'Los docentes ahora pueden registrar calificaciones de exámenes supletorios'
+      }
+    };
+  }
+
+  // 👑 ADMIN: Cerrar fase de supletorios
+  async cerrarSupletorios(periodo_id: string) {
+    const periodo = await this.findOne(periodo_id);
+
+    // Validar que esté en fase EN_PROCESO
+    if (periodo.estado_supletorio !== EstadoSupletorio.ACTIVADO) {
+      throw new BadRequestException(
+        `Los supletorios deben estar EN_PROCESO. Fase actual: ${periodo.estado_supletorio}`
+      );
+    }
+
+    // Contar estudiantes pendientes (con promedio_anual < 7 pero sin nota_supletorio)
+    const estudiantesPendientes = await this.promedioPeriodoRepository
+      .createQueryBuilder('pp')
+      .innerJoin('pp.materia_curso', 'mc')
+      .innerJoin('mc.materia', 'm')
+      .where('pp.periodo_lectivo_id = :periodo_id', { periodo_id })
+      .andWhere('pp.promedio_anual < 7.0')
+      .andWhere('pp.nota_supletorio IS NULL')
+      .andWhere('m.tipoCalificacion = :tipo', { tipo: TipoCalificacion.CUANTITATIVA })
+      .getCount();
+
+    // ⚠️ Advertir si hay pendientes (pero permitir cerrar igual)
+    let advertencia: string | null = null;
+    if (estudiantesPendientes > 0) {
+      advertencia = `Hay ${estudiantesPendientes} estudiante(s) que no rindieron supletorio. Quedarán como REPROBADOS.`;
+    }
+
+    // Cambiar fase a CERRADO
+    periodo.estado_supletorio = EstadoSupletorio.CERRADO;
+    await this.periodoLectivoRepository.save(periodo);
+
+    return {
+      message: 'Fase de supletorios cerrada exitosamente',
+      periodo,
+      estadisticas: {
+        estudiantes_pendientes: estudiantesPendientes,
+        advertencia
+      }
+    };
+  }
+
+  // 👑 ADMIN: Reabrir supletorios
+  async reabrirSupletorios(periodo_id: string) {
+    const periodo = await this.findOne(periodo_id);
+
+    // Validar que esté en fase CERRADO
+    if (periodo.estado_supletorio !== EstadoSupletorio.CERRADO) {
+      throw new BadRequestException(
+        `Solo se pueden reabrir supletorios desde fase CERRADO. Fase actual: ${periodo.estado_supletorio}`
+      );
+    }
+
+    // Validar que el período siga ACTIVO (no finalizado)
+    if (periodo.estado !== EstadoPeriodo.ACTIVO) {
+      throw new BadRequestException(
+        `No se pueden reabrir supletorios en un período ${periodo.estado}`
+      );
+    }
+
+    // Reabrir
+    periodo.estado_supletorio = EstadoSupletorio.ACTIVADO;
+    await this.periodoLectivoRepository.save(periodo);
+
+    return {
+      message: 'Supletorios reabiertos exitosamente',
+      periodo
+    };
+  }
+
+  // 👑 ADMIN: Regresar supletorios a PENDIENTE (ACTIVADO → PENDIENTE)
+  async regresarSupletoriosPendiente(periodo_id: string) {
+    const periodo = await this.findOne(periodo_id);
+
+    // Validar que esté en estado ACTIVADO
+    if (periodo.estado_supletorio !== EstadoSupletorio.ACTIVADO) {
+      throw new BadRequestException(
+        `Los supletorios deben estar ACTIVADOS para regresarlos a PENDIENTE. Estado actual: ${periodo.estado_supletorio}`
+      );
+    }
+
+    // Validar que el período siga ACTIVO
+    if (periodo.estado !== EstadoPeriodo.ACTIVO) {
+      throw new BadRequestException(
+        'No se pueden revertir supletorios de un período FINALIZADO'
+      );
+    }
+
+    // Contar registros que se eliminarán
+    const registrosAfectados = await this.promedioPeriodoRepository
+      .createQueryBuilder('pp')
+      .where('pp.periodo_lectivo_id = :periodo_id', { periodo_id })
+      .andWhere('pp.nota_supletorio IS NOT NULL')
+      .getCount();
+
+    // Limpiar datos de supletorio
+    await this.promedioPeriodoService.limpiarDatosSupletorioPorPeriodo(periodo_id);
+
+    // Regresar a PENDIENTE
+    periodo.estado_supletorio = EstadoSupletorio.PENDIENTE;
+    await this.periodoLectivoRepository.save(periodo);
+
+    return {
+      message: 'Supletorios regresados a PENDIENTE exitosamente',
+      periodo,
+      estadisticas: {
+        registros_eliminados: registrosAfectados,
+        advertencia: 'Se han eliminado todas las calificaciones de supletorio registradas. Los docentes ya NO pueden calificar hasta que reactives los supletorios.'
+      }
+    };
+  }
+
 
   // 👑 ADMIN: Finalizar período lectivo (IRREVERSIBLE)
   async finalizarPeriodoLectivo(id: string) {

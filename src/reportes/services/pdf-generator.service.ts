@@ -3,7 +3,10 @@ import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { DatosLibretaEstudiante } from '../interfaces/datos-libreta.interface';
 import { DatosReporteMateria } from '../interfaces/datos-reporte-materia.interface';
-import { CalificacionCualitativa } from '../../common/enums/cualitativa.enum';
+import { ConversionCualitativa } from '../../common/enums/cualitativa.enum';
+import { DatosConcentradoCalificaciones } from '../interfaces/datos-concentrado.interface';
+import { DatosReporteInsumos } from '../interfaces/datos-reporte-insumos.interface';
+import { DatosRendimientoAnual } from '../interfaces/datos-rendimiento-anual.interface';
 
 @Injectable()
 export class PdfGeneratorService {
@@ -117,6 +120,95 @@ export class PdfGeneratorService {
             }
         });
     }
+
+    /**
+ * Genera PDF de concentrado de calificaciones (LEGAL LANDSCAPE)
+ */
+    async generarConcentradoPDF(datos: DatosConcentradoCalificaciones): Promise<Buffer> {
+        return new Promise((resolve, reject) => {
+            try {
+                const doc = new PDFDocument({
+                    size: 'LEGAL',
+                    layout: 'landscape',
+                    margins: { top: 20, bottom: 20, left: 20, right: 20 }
+                });
+
+                const chunks: Buffer[] = [];
+
+                doc.on('data', (chunk) => chunks.push(chunk));
+                doc.on('end', () => resolve(Buffer.concat(chunks)));
+                doc.on('error', reject);
+
+                this.dibujarEncabezadoConcentrado(doc, datos);
+                this.dibujarTablaConcentrado(doc, datos);
+                this.dibujarFirmaConcentrado(doc, datos);
+
+                doc.end();
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+
+    /**
+     * Genera PDF de reporte de insumos
+     */
+    async generarReporteInsumosPDF(datos: DatosReporteInsumos): Promise<Buffer> {
+        return new Promise((resolve, reject) => {
+            try {
+                const doc = new PDFDocument({
+                    size: 'LEGAL',
+                    layout: 'portrait',
+                    margins: { top: 30, bottom: 30, left: 30, right: 30 }
+                });
+
+                const chunks: Buffer[] = [];
+
+                doc.on('data', (chunk) => chunks.push(chunk));
+                doc.on('end', () => resolve(Buffer.concat(chunks)));
+                doc.on('error', reject);
+
+                this.dibujarEncabezadoReporteInsumos(doc, datos);
+                this.dibujarTablaInsumos(doc, datos);
+                this.dibujarRendimientoYEscalaInsumos(doc, datos);
+                this.dibujarFirmaDocenteInsumos(doc, datos);
+
+                doc.end();
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+
+    async generarRendimientoAnualPDF(datos: DatosRendimientoAnual): Promise<Buffer> {
+        return new Promise((resolve, reject) => {
+            try {
+                const doc = new PDFDocument({
+                    size: 'A4',
+                    layout: 'portrait',
+                    margins: { top: 30, bottom: 30, left: 30, right: 30 }
+                });
+
+                const chunks: Buffer[] = [];
+
+                doc.on('data', (chunk) => chunks.push(chunk));
+                doc.on('end', () => resolve(Buffer.concat(chunks)));
+                doc.on('error', reject);
+
+                this.dibujarEncabezadoRendimientoAnual(doc, datos);
+                this.dibujarTablaRendimientoAnual(doc, datos);
+                this.dibujarCuadrosEstadisticosAnuales(doc, datos);
+                this.dibujarResumenFinal(doc, datos);
+                this.dibujarFirmaDocenteAnual(doc, datos);
+
+                doc.end();
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+
+
     // ==================== MÉTODOS DE DIBUJO PARA LIBRETA INDIVIDUAL ====================
     private dibujarEncabezadoLibreta(doc: PDFKit.PDFDocument, datos: DatosLibretaEstudiante) {
         const pageWidth = doc.page.width;
@@ -307,46 +399,56 @@ export class PdfGeneratorService {
 
         currentY += tituloTableHeight + 2;
 
-        // ============ DEFINIR ANCHOS DE COLUMNAS (APROVECHANDO MÁS ESPACIO) ============
+        // ============ DEFINIR ANCHOS DE COLUMNAS ============
         const colWidths = {
-            asignatura: 100,          // ✅ Aumentado
-            trimestreCompleto: 200,  // ✅ Aumentado
-            promedioFinal: 40,       // ✅ Aumentado
-            cualitativa: 35          // ✅ Aumentado
+            asignatura: 90,
+            trimestreCompleto: 180,  // Reducido para dar espacio a columnas de supletorio
+            // 🆕 COLUMNAS DE SUPLETORIO (total ~145)
+            promedioFinal3Trim: 35,
+            califSupletorio: 35,
+            promedioFinalAnual: 35,
+            equivalencia: 40
         };
 
-        // Sub-columnas dentro de cada trimestre (DEBEN SUMAR 190)
+        // Sub-columnas dentro de cada trimestre (DEBEN SUMAR ~180)
         const subColWidths = {
-            aporte: 55,      // PROMEDIO (27.5) + 70% (27.5) = 55
-            sumativa: 110,   // PROY.INT (27.5) + 15% (27.5) + PRUEBA (27.5) + 15% (27.5) = 110
-            notaTrimestre: 35 // TOTAL + EQUIV
+            aporte: 50,
+            sumativa: 100,
+            notaTrimestre: 30
         };
 
-        // Micro-columnas (DEBEN ENCAJAR PERFECTAMENTE)
+        // Micro-columnas
         const microWidths = {
-            // APORTE (55 total)
-            promedio: 27,
-            ponderado70: 28,
+            // APORTE (50 total)
+            promedio: 25,
+            ponderado70: 25,
 
-            // SUMATIVA (110 total)
-            proyectoIntegrador: 27,
-            ponderado15_1: 28,
-            pruebaEstructurada: 27,
-            ponderado15_2: 28,
+            // SUMATIVA (100 total)
+            proyectoIntegrador: 25,
+            ponderado15_1: 25,
+            pruebaEstructurada: 25,
+            ponderado15_2: 25,
 
-            // NOTA TRIMESTRE (35 total)
-            notaTotal: 18,
-            equivalencia: 17
+            // NOTA TRIMESTRE (30 total)
+            notaTotal: 15,
+            equivalencia: 15
         };
 
-        const finalTableWidth = colWidths.asignatura +
+        // 🆕 Ancho total de la sección "NOTA PONDERADA FINAL"
+        const notaPonderadaFinalWidth =
+            colWidths.promedioFinal3Trim +
+            colWidths.califSupletorio +
+            colWidths.promedioFinalAnual +
+            colWidths.equivalencia;
+
+        const finalTableWidth =
+            colWidths.asignatura +
             (colWidths.trimestreCompleto * 3) +
-            colWidths.promedioFinal +
-            colWidths.cualitativa;
+            notaPonderadaFinalWidth;
 
         const startX = marginLeft;
         const headerLevel2Height = 10;
-        const headerLevel3Height = 50; // ✅ Altura óptima
+        const headerLevel3Height = 50;
         const headerHeight = 12 + headerLevel2Height + headerLevel3Height;
 
         // ============ DIBUJAR RECTÁNGULO DE "ASIGNATURA" (COMBINA 3 FILAS) ============
@@ -363,7 +465,7 @@ export class PdfGeneratorService {
                 align: 'center'
             });
 
-        // ============ NIVEL 1: TRIMESTRES + PROMEDIO + CUALITATIVA ============
+        // ============ NIVEL 1: TRIMESTRES + NOTA PONDERADA FINAL ============
         let xPos = startX + colWidths.asignatura;
 
         // Primer Trimestre
@@ -399,21 +501,18 @@ export class PdfGeneratorService {
         });
         xPos += colWidths.trimestreCompleto;
 
-        // Promedio Final (combina 3 filas) - ROTADO
         doc
-            .rect(xPos, currentY, colWidths.promedioFinal, headerHeight)
+            .rect(xPos, currentY, notaPonderadaFinalWidth, 12)
             .stroke('#000');
-        this.dibujarTextoRotado(doc, 'PROMEDIO FINAL', xPos, currentY, colWidths.promedioFinal, headerHeight);
-        xPos += colWidths.promedioFinal;
-
-        // Cualitativa (combina 3 filas) - ROTADO
         doc
-            .rect(xPos, currentY, colWidths.cualitativa, headerHeight)
-            .stroke('#000');
-        this.dibujarTextoRotado(doc, 'CUALITATIVA', xPos, currentY, colWidths.cualitativa, headerHeight);
+            .fontSize(6)
+            .font('Helvetica-Bold')
+            .text('NOTA PONDERADA FINAL', xPos, currentY + 3, {
+                width: notaPonderadaFinalWidth,
+                align: 'center'
+            });
 
         currentY += 12;
-
         // ============ NIVEL 2: APORTE | SUMATIVA | Nota Trimestre (x3) ============
         xPos = startX + colWidths.asignatura;
 
@@ -452,6 +551,36 @@ export class PdfGeneratorService {
             xPos += subColWidths.notaTrimestre;
         }
 
+        // 🆕 NIVEL 2+3: Columnas de NOTA PONDERADA FINAL (combinan nivel 2 y 3, con texto rotado)
+        const nivel2y3Height = headerLevel2Height + headerLevel3Height;
+
+        // Promedio Final (3 Trimestres)
+        doc
+            .rect(xPos, currentY, colWidths.promedioFinal3Trim, nivel2y3Height)
+            .stroke('#000');
+        this.dibujarTextoRotado(doc, 'PROMEDIO FINAL (3 TRIM)', xPos, currentY, colWidths.promedioFinal3Trim, nivel2y3Height);
+        xPos += colWidths.promedioFinal3Trim;
+
+        // Calificación Examen Supletorio
+        doc
+            .rect(xPos, currentY, colWidths.califSupletorio, nivel2y3Height)
+            .stroke('#000');
+        this.dibujarTextoRotado(doc, 'CALIF. EXAMEN SUPLETORIO', xPos, currentY, colWidths.califSupletorio, nivel2y3Height);
+        xPos += colWidths.califSupletorio;
+
+        // Promedio Final Anual
+        doc
+            .rect(xPos, currentY, colWidths.promedioFinalAnual, nivel2y3Height)
+            .stroke('#000');
+        this.dibujarTextoRotado(doc, 'PROMEDIO FINAL ANUAL', xPos, currentY, colWidths.promedioFinalAnual, nivel2y3Height);
+        xPos += colWidths.promedioFinalAnual;
+
+        // Equivalencia
+        doc
+            .rect(xPos, currentY, colWidths.equivalencia, nivel2y3Height)
+            .stroke('#000');
+        this.dibujarTextoRotado(doc, 'EQUIVALENCIA', xPos, currentY, colWidths.equivalencia, nivel2y3Height);
+
         currentY += headerLevel2Height;
 
         // ============ NIVEL 3: Micro-columnas CON TEXTO ROTADO -90° ============
@@ -471,7 +600,7 @@ export class PdfGeneratorService {
             this.dibujarTextoRotado(doc, '70%', xPos, currentY, microWidths.ponderado70, headerLevel3Height);
             xPos += microWidths.ponderado70;
 
-            // SUMATIVA: PROYECTO INTEGRADOR | 15% | PRUEBA ESTRUCTURADA | 15%
+            // SUMATIVA: PROYECTO | 15% | EXAMEN | 15%
             doc
                 .rect(xPos, currentY, microWidths.proyectoIntegrador, headerLevel3Height)
                 .stroke('#000');
@@ -506,7 +635,7 @@ export class PdfGeneratorService {
             doc
                 .rect(xPos, currentY, microWidths.equivalencia, headerLevel3Height)
                 .stroke('#000');
-            this.dibujarTextoRotado(doc, 'EQUIVALENCIA', xPos, currentY, microWidths.equivalencia, headerLevel3Height);
+            this.dibujarTextoRotado(doc, 'EQUIV', xPos, currentY, microWidths.equivalencia, headerLevel3Height);
             xPos += microWidths.equivalencia;
         }
 
@@ -612,35 +741,53 @@ export class PdfGeneratorService {
                 xPos += microWidths.equivalencia;
             }
 
-            // ✅ PROMEDIO FINAL: Buscar el promedio_anual de esta materia específica
-            doc.rect(xPos, currentY, colWidths.promedioFinal, rowHeight).stroke('#000');
-
+            // 🆕 COLUMNAS DE SUPLETORIO
             const promedioAnualData = datos.promedios_anuales?.find(
                 p => p.materia_nombre === materiaNombre
             );
 
+            // 1. PROMEDIO FINAL (3 TRIMESTRES)
+            doc.rect(xPos, currentY, colWidths.promedioFinal3Trim, rowHeight).stroke('#000');
             const promedioAnual = promedioAnualData?.promedio_anual ?? null;
-
             doc.text(
                 promedioAnual !== null ? promedioAnual.toFixed(2) : '-',
                 xPos,
                 currentY + 2,
-                {
-                    width: colWidths.promedioFinal,
-                    align: 'center'
-                }
+                { width: colWidths.promedioFinal3Trim, align: 'center' }
             );
-            xPos += colWidths.promedioFinal;
+            xPos += colWidths.promedioFinal3Trim;
 
-            // ✅ CUALITATIVA ANUAL: Buscar en datos.promedios_anuales
-            doc.rect(xPos, currentY, colWidths.cualitativa, rowHeight).stroke('#000');
+            // 2. CALIFICACIÓN EXAMEN SUPLETORIO
+            doc.rect(xPos, currentY, colWidths.califSupletorio, rowHeight).stroke('#000');
+            const notaSupletorio = promedioAnualData?.nota_supletorio ?? null;
+            doc.text(
+                notaSupletorio !== null ? notaSupletorio.toFixed(2) : '-',
+                xPos,
+                currentY + 2,
+                { width: colWidths.califSupletorio, align: 'center' }
+            );
+            xPos += colWidths.califSupletorio;
 
-            const cualitativaAnual = promedioAnualData?.cualitativa ?? '';
+            // 3. PROMEDIO FINAL ANUAL (nota_para_libreta)
+            doc.rect(xPos, currentY, colWidths.promedioFinalAnual, rowHeight).stroke('#000');
+            const promedioFinalAnual = promedioAnualData?.promedio_final ?? promedioAnualData?.promedio_anual ?? null;
+            doc.text(
+                promedioFinalAnual !== null ? promedioFinalAnual.toFixed(2) : '-',
+                xPos,
+                currentY + 2,
+                { width: colWidths.promedioFinalAnual, align: 'center' }
+            );
+            xPos += colWidths.promedioFinalAnual;
 
-            doc.text(cualitativaAnual, xPos, currentY + 2, {
-                width: colWidths.cualitativa,
-                align: 'center'
-            });
+            // 4. EQUIVALENCIA (cualitativa_final o cualitativa_anual)
+            doc.rect(xPos, currentY, colWidths.equivalencia, rowHeight).stroke('#000');
+            const cualitativaFinal = promedioAnualData?.cualitativa_final ?? promedioAnualData?.cualitativa ?? '';
+            doc.text(
+                cualitativaFinal,
+                xPos,
+                currentY + 2,
+                { width: colWidths.equivalencia, align: 'center' }
+            );
 
             currentY += rowHeight;
         });
@@ -670,74 +817,49 @@ export class PdfGeneratorService {
                 const materias = trimestreData.materias;
                 const totalMaterias = materias.length;
 
-                // ✅ PROMEDIO de columna PROMEDIO
                 const avgPromedio = materias.reduce((sum, m) => sum + (m.promedio_insumos || 0), 0) / totalMaterias;
-
-                // ✅ PROMEDIO de columna 70%
                 const avgPonderado70 = materias.reduce((sum, m) => sum + (m.ponderado_insumos || 0), 0) / totalMaterias;
-
-                // ✅ PROMEDIO de columna PROYECTO
                 const avgProyecto = materias.reduce((sum, m) => sum + (m.nota_proyecto || 0), 0) / totalMaterias;
-
-                // ✅ PROMEDIO de columna 15% (proyecto)
                 const avgPonderado15_1 = materias.reduce((sum, m) => sum + (m.ponderado_proyecto || 0), 0) / totalMaterias;
-
-                // ✅ PROMEDIO de columna EXAMEN
                 const avgExamen = materias.reduce((sum, m) => sum + (m.nota_examen || 0), 0) / totalMaterias;
-
-                // ✅ PROMEDIO de columna 15% (examen)
                 const avgPonderado15_2 = materias.reduce((sum, m) => sum + (m.ponderado_examen || 0), 0) / totalMaterias;
-
-                // ✅ PROMEDIO de columna NOTA TOTAL
                 const avgNotaTotal = materias.reduce((sum, m) => sum + m.nota_final, 0) / totalMaterias;
-
-                // ✅ CUALITATIVA basada en avgNotaTotal
                 const cualitativaPromedio = this.obtenerCualitativa(avgNotaTotal);
 
-                // DIBUJAR CADA PROMEDIO EN SU COLUMNA
-
-                // Columna PROMEDIO
+                // Dibujar promedios
                 doc.rect(xPos, currentY, microWidths.promedio, rowHeight).stroke();
                 doc.text(avgPromedio.toFixed(2), xPos + 1, currentY + 2, { width: microWidths.promedio - 2, align: 'center' });
                 xPos += microWidths.promedio;
 
-                // Columna 70%
                 doc.rect(xPos, currentY, microWidths.ponderado70, rowHeight).stroke();
                 doc.text(avgPonderado70.toFixed(2), xPos + 1, currentY + 2, { width: microWidths.ponderado70 - 2, align: 'center' });
                 xPos += microWidths.ponderado70;
 
-                // Columna PROYECTO
                 doc.rect(xPos, currentY, microWidths.proyectoIntegrador, rowHeight).stroke();
                 doc.text(avgProyecto.toFixed(2), xPos + 1, currentY + 2, { width: microWidths.proyectoIntegrador - 2, align: 'center' });
                 xPos += microWidths.proyectoIntegrador;
 
-                // Columna 15% (proyecto)
                 doc.rect(xPos, currentY, microWidths.ponderado15_1, rowHeight).stroke();
                 doc.text(avgPonderado15_1.toFixed(2), xPos + 1, currentY + 2, { width: microWidths.ponderado15_1 - 2, align: 'center' });
                 xPos += microWidths.ponderado15_1;
 
-                // Columna EXAMEN
                 doc.rect(xPos, currentY, microWidths.pruebaEstructurada, rowHeight).stroke();
                 doc.text(avgExamen.toFixed(2), xPos + 1, currentY + 2, { width: microWidths.pruebaEstructurada - 2, align: 'center' });
                 xPos += microWidths.pruebaEstructurada;
 
-                // Columna 15% (examen)
                 doc.rect(xPos, currentY, microWidths.ponderado15_2, rowHeight).stroke();
                 doc.text(avgPonderado15_2.toFixed(2), xPos + 1, currentY + 2, { width: microWidths.ponderado15_2 - 2, align: 'center' });
                 xPos += microWidths.ponderado15_2;
 
-                // Columna NOTA TOTAL
                 doc.rect(xPos, currentY, microWidths.notaTotal, rowHeight).stroke();
                 doc.text(avgNotaTotal.toFixed(2), xPos + 1, currentY + 2, { width: microWidths.notaTotal - 2, align: 'center' });
                 xPos += microWidths.notaTotal;
 
-                // Columna EQUIVALENCIA (cualitativa)
                 doc.rect(xPos, currentY, microWidths.equivalencia, rowHeight).stroke();
                 doc.text(cualitativaPromedio, xPos + 1, currentY + 2, { width: microWidths.equivalencia - 2, align: 'center' });
                 xPos += microWidths.equivalencia;
 
             } else {
-                // Si no hay datos, dibujar columnas vacías
                 const totalWidth = subColWidths.aporte + subColWidths.sumativa + subColWidths.notaTrimestre;
                 doc.rect(xPos, currentY, totalWidth, rowHeight).stroke();
                 doc.text('-', xPos + (totalWidth / 2) - 5, currentY + 2);
@@ -745,47 +867,67 @@ export class PdfGeneratorService {
             }
         }
 
-        // Promedio general anual
+        // 🆕 PROMEDIOS DE COLUMNAS DE SUPLETORIO
+        // Promedio General Anual
         if (datos.promedio_general_anual !== null) {
-            doc.rect(xPos, currentY, colWidths.promedioFinal, rowHeight).stroke();
+            doc.rect(xPos, currentY, colWidths.promedioFinal3Trim, rowHeight).stroke();
             doc.text(datos.promedio_general_anual.toFixed(2), xPos + 1, currentY + 2, {
-                width: colWidths.promedioFinal - 2,
+                width: colWidths.promedioFinal3Trim - 2,
                 align: 'center'
             });
         } else {
-            doc.rect(xPos, currentY, colWidths.promedioFinal, rowHeight).stroke();
-            doc.text('-', xPos + 1, currentY + 2, { width: colWidths.promedioFinal - 2, align: 'center' });
+            doc.rect(xPos, currentY, colWidths.promedioFinal3Trim, rowHeight).stroke();
+            doc.text('-', xPos + 1, currentY + 2, { width: colWidths.promedioFinal3Trim - 2, align: 'center' });
         }
-        xPos += colWidths.promedioFinal;
+        xPos += colWidths.promedioFinal3Trim;
+
+        // Calificación Supletorio (vacío en fila de promedios)
+        doc.rect(xPos, currentY, colWidths.califSupletorio, rowHeight).stroke();
+        doc.text('-', xPos + 1, currentY + 2, { width: colWidths.califSupletorio - 2, align: 'center' });
+        xPos += colWidths.califSupletorio;
+
+        if (datos.promedios_anuales && datos.promedios_anuales.length > 0) {
+            const notasFinales = datos.promedios_anuales.map(p =>
+                p.promedio_final ?? p.promedio_anual
+            );
+            const promedioNotasFinales = notasFinales.reduce((sum, nota) => sum + nota, 0) / notasFinales.length;
+
+            doc.rect(xPos, currentY, colWidths.promedioFinalAnual, rowHeight).stroke();
+            doc.text(promedioNotasFinales.toFixed(2), xPos + 1, currentY + 2, {
+                width: colWidths.promedioFinalAnual - 2,
+                align: 'center'
+            });
+        } else {
+            doc.rect(xPos, currentY, colWidths.promedioFinalAnual, rowHeight).stroke();
+            doc.text('-', xPos + 1, currentY + 2, { width: colWidths.promedioFinalAnual - 2, align: 'center' });
+        }
+        xPos += colWidths.promedioFinalAnual;
 
         // Cualitativa general
         if (datos.cualitativa_general_anual) {
-            doc.rect(xPos, currentY, colWidths.cualitativa, rowHeight).stroke();
+            doc.rect(xPos, currentY, colWidths.equivalencia, rowHeight).stroke();
             doc.text(datos.cualitativa_general_anual, xPos + 1, currentY + 2, {
-                width: colWidths.cualitativa - 2,
+                width: colWidths.equivalencia - 2,
                 align: 'center'
             });
         } else {
-            doc.rect(xPos, currentY, colWidths.cualitativa, rowHeight).stroke();
-            doc.text('-', xPos + 1, currentY + 2, { width: colWidths.cualitativa - 2, align: 'center' });
+            doc.rect(xPos, currentY, colWidths.equivalencia, rowHeight).stroke();
+            doc.text('-', xPos + 1, currentY + 2, { width: colWidths.equivalencia - 2, align: 'center' });
         }
 
-        currentY += rowHeight + 15; // Espacio después de PROMEDIOS
-
+        currentY += rowHeight + 15;
 
         // ============ VALIDAR SI ES BÁSICA O BACHILLERATO ============
         const nivelesBasica = ['OCTAVO', 'NOVENO', 'DECIMO'];
         const esBasica = nivelesBasica.includes(datos.curso.nivel);
 
         if (esBasica) {
-            // BÁSICA: Comportamiento + Componentes educativos
             this.dibujarComponentesEducativosBasica(doc, datos, currentY);
         } else {
-            // BACHILLERATO: Comportamiento + Tutoría
             this.dibujarComponentesEducativosBachillerato(doc, datos, currentY);
         }
-
     }
+
     // ==================== COMPONENTES EDUCATIVOS PARA BÁSICA ====================
     private dibujarComponentesEducativosBasica(doc: PDFKit.PDFDocument, datos: DatosLibretaEstudiante, startY: number) {
         const marginLeft = 30;
@@ -794,6 +936,10 @@ export class PdfGeneratorService {
 
         let currentY = startY - 8;
 
+        // ============ SEPARAR COMPORTAMIENTO DE OTROS COMPONENTES ============
+        const comportamiento = datos.componentes_cualitativos.componentes.find(c => c.es_comportamiento);
+        const otrosComponentes = datos.componentes_cualitativos.componentes.filter(c => !c.es_comportamiento);
+
         // ============ DIMENSIONES DE LAS TABLAS (LADO A LADO) ============
         const tabla1Width = 380;
         const tabla2Width = 370;
@@ -801,18 +947,13 @@ export class PdfGeneratorService {
 
         const rowHeight = 12;
 
-        let tabla1X = marginLeft;
-        let tabla2X = marginLeft + tabla1Width + espacioEntreTables;
+        const tabla1X = marginLeft;
+        const tabla2X = marginLeft + tabla1Width + espacioEntreTables;
 
         // ============ TABLA 1: EVALUACIÓN COMPORTAMENTAL ============
-        // ✅ Sin franja gris separada - todo integrado en filas normales
-
-        const col1Width = 280;
-        const calificacionWidth = 100;
-
-        // ✅ Primera fila: "EVALUACIÓN COMPORTAMENTAL" como título integrado
         let xPos = tabla1X;
 
+        // Título
         doc.rect(xPos, currentY, tabla1Width, rowHeight)
             .fillOpacity(0.2)
             .fill('#CCCCCC')
@@ -827,44 +968,48 @@ export class PdfGeneratorService {
 
         currentY += rowHeight;
 
-        // Filas de comportamiento (4 filas: 3 trimestres + comportamiento final)
-        const filas = [
-            { nombre: 'Primer trimestre', calificacion: 'A' },
-            { nombre: 'Segundo trimestre', calificacion: 'A+' },
-            { nombre: 'Tercer trimestre', calificacion: 'A+' },
-            { nombre: 'Comportamiento final', calificacion: 'B+' }
-        ];
+        // ✅ Usar datos reales de comportamiento
+        if (comportamiento) {
+            const col1Width = 280;
+            const calificacionWidth = 100;
 
-        filas.forEach((fila) => {
-            xPos = tabla1X;
+            const filas = [
+                { nombre: 'Primer trimestre', calificacion: comportamiento.calificaciones.trimestre_1 || '-' },
+                { nombre: 'Segundo trimestre', calificacion: comportamiento.calificaciones.trimestre_2 || '-' },
+                { nombre: 'Tercer trimestre', calificacion: comportamiento.calificaciones.trimestre_3 || '-' },
+                { nombre: 'Comportamiento final', calificacion: comportamiento.calificaciones.promedio_anual || '-' }
+            ];
 
-            // Columna nombre
-            doc.rect(xPos, currentY, col1Width, rowHeight).stroke('#000');
-            doc.fontSize(6).font('Helvetica')
-                .text(fila.nombre, xPos + 5, currentY + 3, { width: col1Width - 10 });
-            xPos += col1Width;
+            filas.forEach((fila) => {
+                xPos = tabla1X;
 
-            // Columna calificación
-            doc.rect(xPos, currentY, calificacionWidth, rowHeight).stroke('#000');
-            doc.text(fila.calificacion, xPos, currentY + 3, { width: calificacionWidth, align: 'center' });
+                // Columna nombre
+                doc.rect(xPos, currentY, col1Width, rowHeight).stroke('#000');
+                doc.fontSize(6).font('Helvetica')
+                    .text(fila.nombre, xPos + 5, currentY + 3, { width: col1Width - 10 });
+                xPos += col1Width;
 
-            currentY += rowHeight;
-        });
+                // Columna calificación
+                doc.rect(xPos, currentY, calificacionWidth, rowHeight).stroke('#000');
+                doc.text(fila.calificacion, xPos, currentY + 3, { width: calificacionWidth, align: 'center' });
 
-        // ============ TABLA 2: COMPONENTES EDUCATIVOS ============
-        currentY = startY - 8; // ✅ Resetear a la misma altura inicial
+                currentY += rowHeight;
+            });
+        }
 
-        // Dimensiones tabla 2
+        // ============ TABLA 2: OTROS COMPONENTES EDUCATIVOS ============
+        currentY = startY - 8; // Resetear a la misma altura inicial
+
         const t2Col1Width = 100;
         const t2TrimestreWidth = 60;
         const t2PromedioWidth = 70;
 
         xPos = tabla2X;
 
-        // ✅ Primera fila: Encabezado con altura simple (igual que tabla 1)
+        // Encabezado tabla 2
         doc.rect(xPos, currentY, t2Col1Width, rowHeight).stroke('#000');
         doc.fontSize(6).font('Helvetica-Bold')
-            .text('TRIMESTRE', xPos, currentY + 3, { width: t2Col1Width, align: 'center' });
+            .text('COMPONENTE', xPos, currentY + 3, { width: t2Col1Width, align: 'center' });
         xPos += t2Col1Width;
 
         doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
@@ -884,20 +1029,14 @@ export class PdfGeneratorService {
 
         currentY += rowHeight;
 
-        // ✅ Filas de componentes educativos (4 filas para igualar tabla 1)
-        const componentes = [
-            { nombre: 'Animación Lectora', valores: ['-', '-', '-', 'PA'] },
-            { nombre: 'Orientación Vocacional y Profesional (OVP)', valores: ['-', '-', '-', 'AA'] },
-            { nombre: 'Acompañamiento integral al estudiante (TUTORÍAS)', valores: ['P', 'B', '-', 'DA'] }
-        ];
-
-        componentes.forEach((componente) => {
+        // ✅ Usar datos reales de otros componentes
+        otrosComponentes.forEach((componente) => {
             xPos = tabla2X;
 
             // Nombre componente
             doc.rect(xPos, currentY, t2Col1Width, rowHeight).stroke('#000');
             doc.fontSize(4.5).font('Helvetica')
-                .text(componente.nombre, xPos + 2, currentY + 3, {
+                .text(componente.materia_nombre, xPos + 2, currentY + 3, {
                     width: t2Col1Width - 4,
                     lineBreak: false,
                     ellipsis: true
@@ -906,7 +1045,7 @@ export class PdfGeneratorService {
 
             // Trimestre 1
             doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
-            doc.fontSize(6).text(componente.valores[0], xPos, currentY + 3, {
+            doc.fontSize(6).text(componente.calificaciones.trimestre_1 || '-', xPos, currentY + 3, {
                 width: t2TrimestreWidth,
                 align: 'center'
             });
@@ -914,7 +1053,7 @@ export class PdfGeneratorService {
 
             // Trimestre 2
             doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
-            doc.text(componente.valores[1], xPos, currentY + 3, {
+            doc.text(componente.calificaciones.trimestre_2 || '-', xPos, currentY + 3, {
                 width: t2TrimestreWidth,
                 align: 'center'
             });
@@ -922,7 +1061,7 @@ export class PdfGeneratorService {
 
             // Trimestre 3
             doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
-            doc.text(componente.valores[2], xPos, currentY + 3, {
+            doc.text(componente.calificaciones.trimestre_3 || '-', xPos, currentY + 3, {
                 width: t2TrimestreWidth,
                 align: 'center'
             });
@@ -930,7 +1069,7 @@ export class PdfGeneratorService {
 
             // Promedio
             doc.rect(xPos, currentY, t2PromedioWidth, rowHeight).stroke('#000');
-            doc.text(componente.valores[3], xPos, currentY + 3, {
+            doc.text(componente.calificaciones.promedio_anual || '-', xPos, currentY + 3, {
                 width: t2PromedioWidth,
                 align: 'center'
             });
@@ -938,22 +1077,30 @@ export class PdfGeneratorService {
             currentY += rowHeight;
         });
 
-        // ✅ Agregar 1 fila vacía para igualar altura (tabla 1: 5 filas total, tabla 2: 4 filas + 1 vacía = 5)
-        xPos = tabla2X;
+        // ✅ Agregar filas vacías si es necesario para igualar altura con tabla 1
+        const filasTabla1 = 4; // 3 trimestres + final
+        const filasTabla2 = otrosComponentes.length;
+        const filasVacias = Math.max(0, filasTabla1 - filasTabla2);
 
-        doc.rect(xPos, currentY, t2Col1Width, rowHeight).stroke('#000');
-        xPos += t2Col1Width;
+        for (let i = 0; i < filasVacias; i++) {
+            xPos = tabla2X;
 
-        doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
-        xPos += t2TrimestreWidth;
+            doc.rect(xPos, currentY, t2Col1Width, rowHeight).stroke('#000');
+            xPos += t2Col1Width;
 
-        doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
-        xPos += t2TrimestreWidth;
+            doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
+            xPos += t2TrimestreWidth;
 
-        doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
-        xPos += t2TrimestreWidth;
+            doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
+            xPos += t2TrimestreWidth;
 
-        doc.rect(xPos, currentY, t2PromedioWidth, rowHeight).stroke('#000');
+            doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
+            xPos += t2TrimestreWidth;
+
+            doc.rect(xPos, currentY, t2PromedioWidth, rowHeight).stroke('#000');
+
+            currentY += rowHeight;
+        }
     }
 
     // ==================== COMPONENTES EDUCATIVOS PARA BACHILLERATO ====================
@@ -964,142 +1111,213 @@ export class PdfGeneratorService {
 
         let currentY = startY - 8;
 
-        // ============ DIMENSIONES DE LAS TABLAS (LADO A LADO) ============
-        const tabla1Width = 380;
-        const tabla2Width = 370;
-        const espacioEntreTables = 10;
+        // ============ SEPARAR COMPORTAMIENTO DE OTROS COMPONENTES ============
+        const comportamiento = datos.componentes_cualitativos.componentes.find(c => c.es_comportamiento);
+        const otrosComponentes = datos.componentes_cualitativos.componentes.filter(c => !c.es_comportamiento);
+
+        // ============ DIMENSIONES - DOS TABLAS LADO A LADO ============
+        const tabla1Width = 280;  // Ancho tabla COMPORTAMIENTO
+        const tabla2Width = 280;  // Ancho tabla COMPONENTES EDUCATIVOS
+        const espacioEntreTables = 215;
 
         const rowHeight = 12;
 
-        let tabla1X = marginLeft;
-        let tabla2X = marginLeft + tabla1Width + espacioEntreTables;
+        const tabla1X = marginLeft;
+        const tabla2X = marginLeft + tabla1Width + espacioEntreTables;
 
-        // ============ TABLA 1: EVALUACIÓN COMPORTAMENTAL ============
-        const col1Width = 280;
-        const calificacionWidth = 100;
+        // ============ TABLA 1: COMPORTAMIENTO (IZQUIERDA) ============
+        if (comportamiento) {
+            let xPos = tabla1X;
 
-        // ✅ Primera fila: "EVALUACIÓN COMPORTAMENTAL" como título integrado
-        let xPos = tabla1X;
+            // Anchos de columnas tabla 1
+            const t1Col1Width = 100;
+            const t1Col2Width = 45;  // 1T
+            const t1Col3Width = 45;  // 2T
+            const t1Col4Width = 45;  // 3T
+            const t1Col5Width = 45;  // PROMEDIO
 
-        doc.rect(xPos, currentY, tabla1Width, rowHeight)
-            .fillOpacity(0.2)
-            .fill('#CCCCCC')
-            .fillOpacity(1)
-            .stroke('#000');
+            // Título
+            doc.rect(xPos, currentY, tabla1Width, rowHeight)
+                .fillOpacity(0.2)
+                .fill('#CCCCCC')
+                .fillOpacity(1)
+                .stroke('#000');
 
-        doc.fontSize(7).font('Helvetica-Bold').fillColor('#000')
-            .text('EVALUACIÓN COMPORTAMENTAL', xPos, currentY + 3, {
-                width: tabla1Width,
-                align: 'center'
-            });
+            doc.fontSize(7).font('Helvetica-Bold').fillColor('#000')
+                .text('COMPORTAMIENTO', xPos, currentY + 3, {
+                    width: tabla1Width,
+                    align: 'center'
+                });
 
-        currentY += rowHeight;
+            let yPos = currentY + rowHeight;
 
-        // Filas de comportamiento
-        const filas = [
-            { nombre: 'Primer trimestre', calificacion: 'A' },
-            { nombre: 'Segundo trimestre', calificacion: 'A+' },
-            { nombre: 'Tercer trimestre', calificacion: 'A+' },
-            { nombre: 'Comportamiento final', calificacion: 'B+' }
-        ];
-
-        filas.forEach((fila) => {
+            // Encabezado
             xPos = tabla1X;
 
-            // Columna nombre
-            doc.rect(xPos, currentY, col1Width, rowHeight).stroke('#000');
-            doc.fontSize(6).font('Helvetica')
-                .text(fila.nombre, xPos + 5, currentY + 3, { width: col1Width - 10 });
-            xPos += col1Width;
+            doc.rect(xPos, yPos, t1Col1Width, rowHeight).stroke('#000');
+            doc.fontSize(6).font('Helvetica-Bold')
+                .text('COMPONENTE', xPos, yPos + 3, { width: t1Col1Width, align: 'center' });
+            xPos += t1Col1Width;
 
-            // Columna calificación
-            doc.rect(xPos, currentY, calificacionWidth, rowHeight).stroke('#000');
-            doc.text(fila.calificacion, xPos, currentY + 3, { width: calificacionWidth, align: 'center' });
+            doc.rect(xPos, yPos, t1Col2Width, rowHeight).stroke('#000');
+            doc.fontSize(5).text('1T', xPos, yPos + 3, { width: t1Col2Width, align: 'center' });
+            xPos += t1Col2Width;
 
-            currentY += rowHeight;
-        });
+            doc.rect(xPos, yPos, t1Col3Width, rowHeight).stroke('#000');
+            doc.text('2T', xPos, yPos + 3, { width: t1Col3Width, align: 'center' });
+            xPos += t1Col3Width;
 
-        // ============ TABLA 2: TUTORÍA ============
-        currentY = startY - 8;
+            doc.rect(xPos, yPos, t1Col4Width, rowHeight).stroke('#000');
+            doc.text('3T', xPos, yPos + 3, { width: t1Col4Width, align: 'center' });
+            xPos += t1Col4Width;
 
-        // Dimensiones tabla 2
-        const t2Col1Width = 100;
-        const t2TrimestreWidth = 60;
-        const t2PromedioWidth = 70;
+            doc.rect(xPos, yPos, t1Col5Width, rowHeight).stroke('#000');
+            doc.text('PROMEDIO', xPos, yPos + 3, { width: t1Col5Width, align: 'center' });
 
-        xPos = tabla2X;
+            yPos += rowHeight;
 
-        // ✅ Primera fila: Encabezado simple
-        doc.rect(xPos, currentY, t2Col1Width, rowHeight).stroke('#000');
-        doc.fontSize(6).font('Helvetica-Bold')
-            .text('TRIMESTRE', xPos, currentY + 3, { width: t2Col1Width, align: 'center' });
-        xPos += t2Col1Width;
+            // Fila de datos
+            xPos = tabla1X;
 
-        doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
-        doc.fontSize(5).text('1T', xPos, currentY + 3, { width: t2TrimestreWidth, align: 'center' });
-        xPos += t2TrimestreWidth;
+            doc.rect(xPos, yPos, t1Col1Width, rowHeight).stroke('#000');
+            doc.fontSize(5).font('Helvetica')
+                .text(comportamiento.materia_nombre, xPos + 5, yPos + 3, {
+                    width: t1Col1Width - 10,
+                    lineBreak: false,
+                    ellipsis: true
+                });
+            xPos += t1Col1Width;
 
-        doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
-        doc.text('2T', xPos, currentY + 3, { width: t2TrimestreWidth, align: 'center' });
-        xPos += t2TrimestreWidth;
-
-        doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
-        doc.text('3T', xPos, currentY + 3, { width: t2TrimestreWidth, align: 'center' });
-        xPos += t2TrimestreWidth;
-
-        doc.rect(xPos, currentY, t2PromedioWidth, rowHeight).stroke('#000');
-        doc.text('PROMEDIO', xPos, currentY + 3, { width: t2PromedioWidth, align: 'center' });
-
-        currentY += rowHeight;
-
-        // ✅ Solo Tutoría
-        xPos = tabla2X;
-
-        doc.rect(xPos, currentY, t2Col1Width, rowHeight).stroke('#000');
-        doc.fontSize(5).font('Helvetica')
-            .text('Acompañamiento integral al estudiante (TUTORÍAS)', xPos + 2, currentY + 3, {
-                width: t2Col1Width - 4,
-                lineBreak: false,
-                ellipsis: true
+            // 1T
+            doc.rect(xPos, yPos, t1Col2Width, rowHeight).stroke('#000');
+            doc.fontSize(6).text(comportamiento.calificaciones.trimestre_1 || '-', xPos, yPos + 3, {
+                width: t1Col2Width,
+                align: 'center'
             });
-        xPos += t2Col1Width;
+            xPos += t1Col2Width;
 
-        doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
-        doc.fontSize(6).text('P', xPos, currentY + 3, { width: t2TrimestreWidth, align: 'center' });
-        xPos += t2TrimestreWidth;
+            // 2T
+            doc.rect(xPos, yPos, t1Col3Width, rowHeight).stroke('#000');
+            doc.text(comportamiento.calificaciones.trimestre_2 || '-', xPos, yPos + 3, {
+                width: t1Col3Width,
+                align: 'center'
+            });
+            xPos += t1Col3Width;
 
-        doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
-        doc.text('B', xPos, currentY + 3, { width: t2TrimestreWidth, align: 'center' });
-        xPos += t2TrimestreWidth;
+            // 3T
+            doc.rect(xPos, yPos, t1Col4Width, rowHeight).stroke('#000');
+            doc.text(comportamiento.calificaciones.trimestre_3 || '-', xPos, yPos + 3, {
+                width: t1Col4Width,
+                align: 'center'
+            });
+            xPos += t1Col4Width;
 
-        doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
-        doc.text('-', xPos, currentY + 3, { width: t2TrimestreWidth, align: 'center' });
-        xPos += t2TrimestreWidth;
+            // PROMEDIO
+            doc.rect(xPos, yPos, t1Col5Width, rowHeight).stroke('#000');
+            doc.text(comportamiento.calificaciones.promedio_anual || '-', xPos, yPos + 3, {
+                width: t1Col5Width,
+                align: 'center'
+            });
+        }
 
-        doc.rect(xPos, currentY, t2PromedioWidth, rowHeight).stroke('#000');
-        doc.text('DA', xPos, currentY + 3, { width: t2PromedioWidth, align: 'center' });
+        // ============ TABLA 2: COMPONENTES EDUCATIVOS (DERECHA) ============
+        if (otrosComponentes.length > 0) {
+            let xPos = tabla2X;
 
-        currentY += rowHeight;
+            // Anchos de columnas tabla 2
+            const t2Col1Width = 100;
+            const t2Col2Width = 45;  // 1T
+            const t2Col3Width = 45;  // 2T
+            const t2Col4Width = 45;  // 3T
+            const t2Col5Width = 45;  // PROMEDIO
 
-        // ✅ Agregar 3 filas vacías para igualar altura (tabla 1: 5 filas, tabla 2: 2 + 3 vacías = 5)
-        for (let i = 0; i < 3; i++) {
+            // Título
+            doc.rect(xPos, currentY, tabla2Width, rowHeight)
+                .fillOpacity(0.2)
+                .fill('#CCCCCC')
+                .fillOpacity(1)
+                .stroke('#000');
+
+            doc.fontSize(7).font('Helvetica-Bold').fillColor('#000')
+                .text('COMPONENTES EDUCATIVOS', xPos, currentY + 3, {
+                    width: tabla2Width,
+                    align: 'center'
+                });
+
+            let yPos = currentY + rowHeight;
+
+            // Encabezado
             xPos = tabla2X;
 
-            doc.rect(xPos, currentY, t2Col1Width, rowHeight).stroke('#000');
+            doc.rect(xPos, yPos, t2Col1Width, rowHeight).stroke('#000');
+            doc.fontSize(6).font('Helvetica-Bold')
+                .text('COMPONENTE', xPos, yPos + 3, { width: t2Col1Width, align: 'center' });
             xPos += t2Col1Width;
 
-            doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
-            xPos += t2TrimestreWidth;
+            doc.rect(xPos, yPos, t2Col2Width, rowHeight).stroke('#000');
+            doc.fontSize(5).text('1T', xPos, yPos + 3, { width: t2Col2Width, align: 'center' });
+            xPos += t2Col2Width;
 
-            doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
-            xPos += t2TrimestreWidth;
+            doc.rect(xPos, yPos, t2Col3Width, rowHeight).stroke('#000');
+            doc.text('2T', xPos, yPos + 3, { width: t2Col3Width, align: 'center' });
+            xPos += t2Col3Width;
 
-            doc.rect(xPos, currentY, t2TrimestreWidth, rowHeight).stroke('#000');
-            xPos += t2TrimestreWidth;
+            doc.rect(xPos, yPos, t2Col4Width, rowHeight).stroke('#000');
+            doc.text('3T', xPos, yPos + 3, { width: t2Col4Width, align: 'center' });
+            xPos += t2Col4Width;
 
-            doc.rect(xPos, currentY, t2PromedioWidth, rowHeight).stroke('#000');
+            doc.rect(xPos, yPos, t2Col5Width, rowHeight).stroke('#000');
+            doc.text('PROMEDIO', xPos, yPos + 3, { width: t2Col5Width, align: 'center' });
 
-            currentY += rowHeight;
+            yPos += rowHeight;
+
+            // Filas de datos
+            otrosComponentes.forEach((componente) => {
+                xPos = tabla2X;
+
+                // Nombre
+                doc.rect(xPos, yPos, t2Col1Width, rowHeight).stroke('#000');
+                doc.fontSize(5).font('Helvetica')
+                    .text(componente.materia_nombre, xPos + 5, yPos + 3, {
+                        width: t2Col1Width - 10,
+                        lineBreak: false,
+                        ellipsis: true
+                    });
+                xPos += t2Col1Width;
+
+                // 1T
+                doc.rect(xPos, yPos, t2Col2Width, rowHeight).stroke('#000');
+                doc.fontSize(6).text(componente.calificaciones.trimestre_1 || '-', xPos, yPos + 3, {
+                    width: t2Col2Width,
+                    align: 'center'
+                });
+                xPos += t2Col2Width;
+
+                // 2T
+                doc.rect(xPos, yPos, t2Col3Width, rowHeight).stroke('#000');
+                doc.text(componente.calificaciones.trimestre_2 || '-', xPos, yPos + 3, {
+                    width: t2Col3Width,
+                    align: 'center'
+                });
+                xPos += t2Col3Width;
+
+                // 3T
+                doc.rect(xPos, yPos, t2Col4Width, rowHeight).stroke('#000');
+                doc.text(componente.calificaciones.trimestre_3 || '-', xPos, yPos + 3, {
+                    width: t2Col4Width,
+                    align: 'center'
+                });
+                xPos += t2Col4Width;
+
+                // PROMEDIO
+                doc.rect(xPos, yPos, t2Col5Width, rowHeight).stroke('#000');
+                doc.text(componente.calificaciones.promedio_anual || '-', xPos, yPos + 3, {
+                    width: t2Col5Width,
+                    align: 'center'
+                });
+
+                yPos += rowHeight;
+            });
         }
     }
 
@@ -1373,7 +1591,7 @@ export class PdfGeneratorService {
             .fontSize(9)
             .font('Helvetica')
             .text(
-                `Periodo ${datos.periodo.nombre}`,
+                `${datos.periodo.nombre}`,
                 marginLeft,
                 currentY,
                 {
@@ -1887,9 +2105,9 @@ export class PdfGeneratorService {
         doc.fillColor('#000');
     }
 
-        /**
-     * FASE 4: Dibuja tablas de RENDIMIENTO y ESCALA DE CALIFICACIONES + GRÁFICA
-     */
+    /**
+ * FASE 4: Dibuja tablas de RENDIMIENTO y ESCALA DE CALIFICACIONES + GRÁFICA
+ */
     private dibujarRendimientoYEscala(doc: PDFKit.PDFDocument, datos: DatosReporteMateria) {
         const pageWidth = doc.page.width;
         const marginLeft = 30;
@@ -2023,9 +2241,9 @@ export class PdfGeneratorService {
             .stroke('#000');
         doc.fontSize(6).font('Helvetica-Bold').fillColor('#000')
             .text(totalCantidad.toString(), xPos, currentY + 2, {
-            width: colRendimiento.cantidad,
-            align: 'center'
-        });
+                width: colRendimiento.cantidad,
+                align: 'center'
+            });
         xPos += colRendimiento.cantidad;
 
         doc.rect(xPos, currentY, colRendimiento.porcentaje, rowHeight)
@@ -2035,9 +2253,9 @@ export class PdfGeneratorService {
             .stroke('#000');
         doc.fontSize(6).font('Helvetica-Bold').fillColor('#000')
             .text(totalPorcentaje.toFixed(2) + '%', xPos, currentY + 2, {
-            width: colRendimiento.porcentaje,
-            align: 'center'
-        });
+                width: colRendimiento.porcentaje,
+                align: 'center'
+            });
 
         currentY += rowHeight + 10;
 
@@ -2048,7 +2266,7 @@ export class PdfGeneratorService {
         // ✅ Encabezado SIN fondo gris (formato de tabla normal)
         doc.rect(xPos, currentY, tablaEscalaWidth, rowHeight).stroke('#000');
         doc.fontSize(6).font('Helvetica-Bold').fillColor('#000')
-            .text('ESCALA DE CALIFICACIONES (ART.194 RGLOEI)', xPos + 2, currentY + 2, {
+            .text('ESCALA DE CALIFICACIONES', xPos + 2, currentY + 2, {
                 width: tablaEscalaWidth - 4,
                 align: 'center'
             });
@@ -2129,7 +2347,7 @@ export class PdfGeneratorService {
         for (let i = 0; i <= 4; i++) {
             const porcentaje = i * 25;
             const lineY = graficaY + margenSuperior + areaBarrasHeight - (areaBarrasHeight * (porcentaje / 100));
-            
+
             doc.strokeColor('#CCCCCC').lineWidth(0.5)
                 .moveTo(graficaX + margenIzquierdo, lineY)
                 .lineTo(graficaX + graficaWidth - 10, lineY)
@@ -2251,9 +2469,9 @@ export class PdfGeneratorService {
         doc.fillOpacity(1).fillColor('#000');
     }
 
-        /**
-     * FASE 6: Dibuja la firma del docente
-     */
+    /**
+ * FASE 6: Dibuja la firma del docente
+ */
     private dibujarFirmaDocente(doc: PDFKit.PDFDocument, datos: DatosReporteMateria) {
         const pageWidth = doc.page.width;
         let currentY = doc.y + 25; // Espacio desde la sección anterior
@@ -2266,14 +2484,14 @@ export class PdfGeneratorService {
             .lineTo(lineaX + lineaWidth, currentY)
             .stroke('#000');
 
-        currentY += 5; // Espacio entre línea y texto
+        currentY += 3; // Espacio entre línea y texto
 
         // ============ NOMBRE DEL DOCENTE (CENTRADO) ============
         const docenteNombre = datos.docente
             ? `${datos.docente.apellidos} ${datos.docente.nombres}`.toUpperCase()
             : 'SIN ASIGNAR';
 
-        doc.fontSize(7).font('Helvetica-Bold').fillColor('#000')
+        doc.fontSize(6).font('Helvetica-Bold').fillColor('#000')
             .text(
                 docenteNombre,
                 lineaX,
@@ -2287,7 +2505,7 @@ export class PdfGeneratorService {
         currentY += 10; // Espacio entre nombre y rol
 
         // ============ ROL "DOCENTE" (CENTRADO) ============
-        doc.fontSize(7).font('Helvetica').fillColor('#000')
+        doc.fontSize(6).font('Helvetica').fillColor('#000')
             .text(
                 'DOCENTE',
                 lineaX,
@@ -2318,5 +2536,875 @@ export class PdfGeneratorService {
         if (nota >= 7.0) return 'AA';
         if (nota >= 4.01) return 'PA';
         return 'NA';
+    }
+    // ==================== CONCENTRADO DE CALIFICACIONES ====================
+    private dibujarEncabezadoConcentrado(doc: PDFKit.PDFDocument, datos: DatosConcentradoCalificaciones) {
+        const pageWidth = doc.page.width;
+        const marginLeft = 20;
+        const marginRight = 20;
+        const encabezadoWidth = pageWidth - marginLeft - marginRight;
+        let currentY = 20;
+
+        // ============ PRIMERA SECCIÓN: TÍTULO INSTITUCIONAL ============
+        const tituloHeight = 45;
+
+        doc
+            .rect(marginLeft, currentY, encabezadoWidth, tituloHeight)
+            .lineWidth(1)
+            .stroke('#000');
+
+        // Logo (si existe)
+        const logoPath = 'public/assets/logo.jpg';
+        try {
+            doc.image(logoPath, marginLeft + 5, currentY + 5, { width: 35, height: 35 });
+        } catch (error) {
+            // Logo no disponible
+        }
+
+        // Título principal
+        doc
+            .fontSize(11)
+            .font('Helvetica-Bold')
+            .fillColor('#000')
+            .text(
+                'UNIDAD EDUCATIVA FISCAL CINCO DE JUNIO',
+                marginLeft,
+                currentY + 8,
+                { width: encabezadoWidth, align: 'center' }
+            );
+
+        // Subtítulo
+        doc
+            .fontSize(9)
+            .font('Helvetica')
+            .text(
+                'CONCENTRADO DE CALIFICACIONES',
+                marginLeft,
+                currentY + 23,
+                { width: encabezadoWidth, align: 'center' }
+            );
+
+        currentY += tituloHeight + 2;
+
+        // ============ SEGUNDA SECCIÓN: INFORMACIÓN DEL CURSO Y TRIMESTRE ============
+        const infoHeight = 60;
+
+        doc
+            .rect(marginLeft, currentY, encabezadoWidth, infoHeight)
+            .lineWidth(1)
+            .stroke('#000');
+
+        const colWidth = encabezadoWidth / 3;
+        let startX = marginLeft;
+
+        // Columna 1: Período Lectivo y Trimestre
+        doc
+            .fontSize(7)
+            .font('Helvetica-Bold')
+            .text('PERÍODO LECTIVO:', startX + 5, currentY + 5);
+        doc
+            .font('Helvetica')
+            .text(datos.periodo.nombre, startX + 5, currentY + 14, { width: colWidth - 10 });
+
+        doc
+            .font('Helvetica-Bold')
+            .text('TRIMESTRE:', startX + 5, currentY + 26);
+        doc
+            .font('Helvetica')
+            .text(datos.trimestre.nombre, startX + 5, currentY + 35, { width: colWidth - 10 });
+
+        // Línea divisoria 1
+        doc
+            .moveTo(startX + colWidth, currentY)
+            .lineTo(startX + colWidth, currentY + infoHeight)
+            .stroke();
+
+        startX += colWidth;
+
+        // Columna 2: Curso
+        doc
+            .font('Helvetica-Bold')
+            .text('CURSO:', startX + 5, currentY + 5);
+
+        const cursoTexto = `${datos.curso.nivel} "${datos.curso.paralelo}"`;
+        doc
+            .font('Helvetica')
+            .text(cursoTexto, startX + 5, currentY + 14, { width: colWidth - 10 });
+
+        doc
+            .font('Helvetica-Bold')
+            .text('ESPECIALIDAD:', startX + 5, currentY + 26);
+        doc
+            .font('Helvetica')
+            .text(datos.curso.especialidad, startX + 5, currentY + 35, { width: colWidth - 10 });
+
+        // Línea divisoria 2
+        doc
+            .moveTo(startX + colWidth, currentY)
+            .lineTo(startX + colWidth, currentY + infoHeight)
+            .stroke();
+
+        startX += colWidth;
+
+        // Columna 3: Tutor
+        doc
+            .font('Helvetica-Bold')
+            .text('TUTOR/A:', startX + 5, currentY + 5);
+
+        const tutorNombre = `${datos.docente.nombres} ${datos.docente.apellidos}`;
+        doc
+            .font('Helvetica')
+            .text(tutorNombre, startX + 5, currentY + 14, { width: colWidth - 10 });
+
+        doc
+            .font('Helvetica-Bold')
+            .text('TOTAL ESTUDIANTES:', startX + 5, currentY + 26);
+        doc
+            .font('Helvetica')
+            .text(datos.estudiantes.length.toString(), startX + 5, currentY + 35);
+    }
+
+    private dibujarTablaConcentrado(doc: PDFKit.PDFDocument, datos: DatosConcentradoCalificaciones) {
+        // 1. Configuraciones iniciales
+        const { width: pageWidth, height: pageHeight } = doc.page;
+        const marginLeft = 20, marginRight = 20, marginBottom = 80;
+        let currentY = 130;
+        const tableWidth = pageWidth - marginLeft - marginRight;
+
+        // 2. Cálculo dinámico de anchos basado en DATOS REALES
+        const numMaterias = datos.materias_orden.length;
+        const rankingWidth = 30, nombreWidth = 150, promedioWidth = 40, cualitativaWidth = 35;
+
+        // Si no hay materias, evitamos división por cero
+        const materiaWidth = numMaterias > 0
+            ? (tableWidth - rankingWidth - nombreWidth - promedioWidth - cualitativaWidth) / numMaterias
+            : 0;
+
+        // 3. Función auxiliar para celdas (Mantiene consistencia de estilo)
+        const drawCell = (x: number, y: number, w: number, h: number, text: string, bgColor: string, isBold = false, align: 'center' | 'left' = 'center') => {
+            doc.rect(x, y, w, h).fillAndStroke(bgColor, '#333');
+            doc.font(isBold ? 'Helvetica-Bold' : 'Helvetica')
+                .fontSize(7)
+                .fillColor('#000')
+                .text(text || '', x + 2, y + (h / 2) - 3, { width: w - 4, align: align });
+        };
+
+        // 4. Función para redibujar encabezados (Se llama al inicio y en cada addPage)
+        const imprimirEncabezados = (y: number) => {
+            const hHeight = 60;
+            let xP = marginLeft;
+
+            drawCell(xP, y, rankingWidth, hHeight, 'RANK', '#F2F2F2', true);
+            xP += rankingWidth;
+            drawCell(xP, y, nombreWidth, hHeight, 'APELLIDOS Y NOMBRES', '#F2F2F2', true);
+            xP += nombreWidth;
+
+            datos.materias_orden.forEach((materia, index) => {
+                const color = index % 2 === 0 ? '#E8F4FD' : '#FEF9E7';
+                doc.rect(xP, y, materiaWidth, hHeight).fillAndStroke(color, '#333');
+                // Usamos tu método existente para rotar el nombre de la materia
+                this.dibujarTextoRotado(doc, materia.toUpperCase(), xP, y, materiaWidth, hHeight);
+                xP += materiaWidth;
+            });
+
+            drawCell(xP, y, promedioWidth, hHeight, 'PROM', '#F2F2F2', true);
+            xP += promedioWidth;
+            drawCell(xP, y, cualitativaWidth, hHeight, 'CUAL', '#F2F2F2', true);
+
+            return y + hHeight;
+        };
+
+        // ============ RENDERIZADO INICIAL ============
+        currentY = imprimirEncabezados(currentY);
+
+        // ============ FILAS DE ESTUDIANTES (DATOS REALES) ============
+        const rowHeight = 18;
+
+        datos.estudiantes.forEach((estudiante, index) => {
+            // Control de salto de página
+            if (currentY + rowHeight > pageHeight - marginBottom) {
+                doc.addPage({ size: 'LEGAL', layout: 'landscape', margins: { top: 20, bottom: 20, left: 20, right: 20 } });
+                currentY = 40;
+                currentY = imprimirEncabezados(currentY);
+            }
+
+            const rowBg = index % 2 === 0 ? '#FFFFFF' : '#F9F9F9';
+            let xPos = marginLeft;
+
+            // Ranking y Nombre
+            drawCell(xPos, currentY, rankingWidth, rowHeight, estudiante.ranking.toString(), rowBg);
+            xPos += rankingWidth;
+            drawCell(xPos, currentY, nombreWidth, rowHeight, estudiante.nombres_completos, rowBg, false, 'left');
+            xPos += nombreWidth;
+
+            // Notas por Materia (Siguiendo el orden de materias_orden)
+            datos.materias_orden.forEach((materiaNombre, idx) => {
+                const cellColor = idx % 2 === 0 ? '#F4FAFF' : '#FFFDF5';
+
+                // Buscamos la calificación que coincida con el nombre de la materia
+                const calif = estudiante.calificaciones_materias.find(c => c.materia_nombre === materiaNombre);
+                const notaTexto = calif && calif.nota_final > 0 ? calif.nota_final.toFixed(2) : '-';
+
+                drawCell(xPos, currentY, materiaWidth, rowHeight, notaTexto, cellColor);
+                xPos += materiaWidth;
+            });
+
+            // Totales del Estudiante
+            drawCell(xPos, currentY, promedioWidth, rowHeight, estudiante.promedio_general.toFixed(2), rowBg, true);
+            xPos += promedioWidth;
+            drawCell(xPos, currentY, cualitativaWidth, rowHeight, estudiante.cualitativa_general, rowBg);
+
+            currentY += rowHeight;
+        });
+
+        // ============ FILA DE PROMEDIOS DEL CURSO ============
+        // Verificamos si hay espacio para el pie de tabla
+        if (currentY + rowHeight > pageHeight - marginBottom) {
+            doc.addPage({ size: 'LEGAL', layout: 'landscape' });
+            currentY = 40;
+            currentY = imprimirEncabezados(currentY);
+        }
+
+        let xFinal = marginLeft;
+        const footerColor = '#D5F5E3';
+
+        // Celda de etiqueta "PROMEDIOS"
+        drawCell(xFinal, currentY, rankingWidth + nombreWidth, rowHeight, 'PROMEDIOS GENERALES', footerColor, true, 'left');
+        xFinal += (rankingWidth + nombreWidth);
+
+        // Promedios por materia
+        datos.materias_orden.forEach((materiaNombre) => {
+            const promMateria = datos.promedios_curso.find(p => p.materia_nombre === materiaNombre);
+            const promTexto = promMateria && promMateria.promedio_materia > 0 ? promMateria.promedio_materia.toFixed(2) : '-';
+
+            drawCell(xFinal, currentY, materiaWidth, rowHeight, promTexto, footerColor, true);
+            xFinal += materiaWidth;
+        });
+
+        // Promedio y Cualitativa Final del Curso
+        drawCell(xFinal, currentY, promedioWidth, rowHeight, datos.promedio_general_curso.toFixed(2), footerColor, true);
+        xFinal += promedioWidth;
+        drawCell(xFinal, currentY, cualitativaWidth, rowHeight, datos.cualitativa_general_curso, footerColor, true);
+    }
+
+    private dibujarFirmaConcentrado(doc: PDFKit.PDFDocument, datos: DatosConcentradoCalificaciones) {
+        const pageHeight = doc.page.height;
+        const pageWidth = doc.page.width;
+        const marginLeft = 20;
+
+        const firmaY = pageHeight - 60;
+
+        const tutorNombre = `${datos.docente.nombres} ${datos.docente.apellidos}`;
+
+        doc
+            .fontSize(8)
+            .font('Helvetica')
+            .text('_______________________________', marginLeft + 100, firmaY, { width: 200, align: 'center' });
+
+        doc
+            .fontSize(7)
+            .font('Helvetica-Bold')
+            .text(tutorNombre.toUpperCase(), marginLeft + 100, firmaY + 12, { width: 200, align: 'center' });
+
+        doc
+            .fontSize(7)
+            .font('Helvetica')
+            .text('Tutor/a del Curso', marginLeft + 100, firmaY + 22, { width: 200, align: 'center' });
+    }
+
+    // ========================= METODOS PARA REPORTE DE INSUMOS =============================================
+
+    private dibujarEncabezadoReporteInsumos(doc: PDFKit.PDFDocument, datos: DatosReporteInsumos) {
+        const pageWidth = doc.page.width;
+        const marginLeft = 30;
+        const marginRight = 30;
+        const encabezadoWidth = pageWidth - marginLeft - marginRight;
+        let currentY = 30;
+
+        // Nombre de la institución
+        doc
+            .fontSize(12)
+            .font('Helvetica-Bold')
+            .fillColor('#000')
+            .text(
+                'UNIDAD EDUCATIVA FISCAL CINCO DE JUNIO',
+                marginLeft,
+                currentY,
+                { width: encabezadoWidth, align: 'center' }
+            );
+
+        currentY += 18;
+
+        // Título del reporte
+        doc
+            .fontSize(10)
+            .font('Helvetica-Bold')
+            .text(
+                `APORTES DEL ${datos.trimestre.nombre.toUpperCase()}`,
+                marginLeft,
+                currentY,
+                { width: encabezadoWidth, align: 'center' }
+            );
+
+        currentY += 15;
+
+        // Período
+        doc
+            .fontSize(9)
+            .font('Helvetica')
+            .text(
+                datos.periodo.nombre,
+                marginLeft,
+                currentY,
+                { width: encabezadoWidth, align: 'center' }
+            );
+
+        currentY += 20;
+
+        // Asignatura
+        const asignaturaTexto = `ASIGNATURA:     ${datos.materia.nombre.toUpperCase()}`;
+        doc
+            .fontSize(9)
+            .font('Helvetica-Bold')
+            .text(
+                asignaturaTexto,
+                marginLeft,
+                currentY,
+                { width: encabezadoWidth, align: 'center' }
+            );
+
+        currentY += 15;
+
+        // Curso y Docente
+        const cursoTexto = `${datos.curso.nivel} "${datos.curso.paralelo}"`;
+        const docenteNombre = datos.docente
+            ? `${datos.docente.apellidos} ${datos.docente.nombres}`.toUpperCase()
+            : 'SIN ASIGNAR';
+
+        const lineaCompleta = `CURSO:  ${cursoTexto}                    DOCENTE:  ${docenteNombre}`;
+
+        doc
+            .fontSize(9)
+            .font('Helvetica')
+            .text(
+                lineaCompleta,
+                marginLeft,
+                currentY,
+                { width: encabezadoWidth, align: 'center' }
+            );
+
+        currentY += 25;
+
+        doc.y = currentY;
+        doc.fillColor('#000');
+    }
+    private dibujarTablaInsumos(doc: PDFKit.PDFDocument, datos: DatosReporteInsumos) {
+        const pageWidth = doc.page.width;
+        const marginLeft = 30;
+        const marginRight = 30;
+        const marginBottom = 80; // Espacio para firmas/gráficos abajo
+        let currentY = doc.y;
+
+        const numInsumos = datos.insumos_orden.length;
+        const numeroWidth = 25;
+        const nombreWidth = 180;
+        const promedioWidth = 45;
+        const cualitativaWidth = 40;
+
+        const insumosDisponibleWidth = pageWidth - marginLeft - marginRight - numeroWidth - nombreWidth - promedioWidth - cualitativaWidth;
+        const insumoWidth = insumosDisponibleWidth / numInsumos;
+        const tableWidth = numeroWidth + nombreWidth + (insumoWidth * numInsumos) + promedioWidth + cualitativaWidth;
+        const startX = (pageWidth - tableWidth) / 2;
+
+        const headerHeight = 60;
+        const rowHeight = 16;
+
+        // --- FUNCIÓN AUXILIAR DE CELDA (LA CLAVE DEL ÉXITO) ---
+        const drawInsumoCell = (x: number, y: number, w: number, h: number, text: string, bgColor: string, isBold = false, align: 'center' | 'left' = 'center') => {
+            doc.rect(x, y, w, h).fillAndStroke(bgColor, '#333'); // Borde gris oscuro suave
+            doc.font(isBold ? 'Helvetica-Bold' : 'Helvetica')
+                .fontSize(7)
+                .fillColor('#000') // <--- Forzamos negro en cada celda
+                .text(text || '', x + 2, y + (h / 2) - 3, { width: w - 4, align: align });
+        };
+
+        // --- FUNCIÓN PARA ENCABEZADOS (Para saltos de página) ---
+        const imprimirEncabezadosInsumos = (y: number) => {
+            let xP = startX;
+            // Encabezados estáticos
+            drawInsumoCell(xP, y, numeroWidth, headerHeight, 'N°', '#E0E0E0', true);
+            xP += numeroWidth;
+            drawInsumoCell(xP, y, nombreWidth, headerHeight, 'NÓMINA', '#E0E0E0', true);
+            xP += nombreWidth;
+
+            // Insumos rotados
+            datos.insumos_orden.forEach((insumo, index) => {
+                const color = index % 2 === 0 ? '#D6EAF8' : '#FCF3CF';
+                doc.rect(xP, y, insumoWidth, headerHeight).fillAndStroke(color, '#333');
+                this.dibujarTextoRotado(doc, insumo.toUpperCase(), xP, y, insumoWidth, headerHeight);
+                xP += insumoWidth;
+            });
+
+            // Promedio y Cualitativa
+            drawInsumoCell(xP, y, promedioWidth, headerHeight, 'PROM', '#E0E0E0', true);
+            xP += promedioWidth;
+            drawInsumoCell(xP, y, cualitativaWidth, headerHeight, 'CUAL', '#E0E0E0', true);
+
+            return y + headerHeight;
+        };
+
+        // ============ RENDERIZADO DE TABLA ============
+        currentY = imprimirEncabezadosInsumos(currentY);
+
+        datos.estudiantes.forEach((estudiante, index) => {
+            // Control de Salto de Página
+            if (currentY + rowHeight > doc.page.height - marginBottom) {
+                doc.addPage({ size: 'A4', layout: 'portrait', margins: { top: 30, bottom: 30, left: 30, right: 30 } });
+                currentY = 50;
+                currentY = imprimirEncabezadosInsumos(currentY);
+            }
+
+            let xPos = startX;
+            const rowBg = index % 2 === 0 ? '#FFFFFF' : '#F9F9F9';
+
+            // N° y Nombre
+            drawInsumoCell(xPos, currentY, numeroWidth, rowHeight, estudiante.numero.toString(), rowBg);
+            xPos += numeroWidth;
+            drawInsumoCell(xPos, currentY, nombreWidth, rowHeight, estudiante.estudiante_nombre, rowBg, false, 'left');
+            xPos += nombreWidth;
+
+            // Notas Insumos
+            estudiante.calificaciones_insumos.forEach((cal, idx) => {
+                const cellColor = idx % 2 === 0 ? '#EBF5FB' : '#FEF9E7';
+                const notaTexto = cal.nota !== null && cal.nota > 0 ? cal.nota.toFixed(2) : '-';
+                drawInsumoCell(xPos, currentY, insumoWidth, rowHeight, notaTexto, cellColor);
+                xPos += insumoWidth;
+            });
+
+            // Promedio y Cualitativa del Estudiante
+            drawInsumoCell(xPos, currentY, promedioWidth, rowHeight, estudiante.promedio_insumos.toFixed(2), rowBg, true);
+            xPos += promedioWidth;
+            drawInsumoCell(xPos, currentY, cualitativaWidth, rowHeight, estudiante.cualitativa, rowBg);
+
+            currentY += rowHeight;
+        });
+
+        // ============ FILA DE PROMEDIOS FINALES ============
+        if (currentY + rowHeight > doc.page.height - marginBottom) {
+            doc.addPage();
+            currentY = 50;
+            currentY = imprimirEncabezadosInsumos(currentY);
+        }
+
+        let xFinal = startX;
+        const footerColor = '#ABEBC6';
+
+        // Etiqueta Promedios
+        drawInsumoCell(xFinal, currentY, numeroWidth + nombreWidth, rowHeight, 'PROMEDIOS', footerColor, true, 'left');
+        xFinal += (numeroWidth + nombreWidth);
+
+        // Totales por cada Insumo
+        datos.promedios_por_insumo.forEach((promedio, idx) => {
+            const color = idx % 2 === 0 ? '#A9DFBF' : '#F9E79F';
+            const promTexto = promedio > 0 ? promedio.toFixed(2) : '-';
+            drawInsumoCell(xFinal, currentY, insumoWidth, rowHeight, promTexto, color, true);
+            xFinal += insumoWidth;
+        });
+
+        // Final de Fila
+        drawInsumoCell(xFinal, currentY, promedioWidth, rowHeight, datos.promedio_general_curso.toFixed(2), footerColor, true);
+        xFinal += promedioWidth;
+        drawInsumoCell(xFinal, currentY, cualitativaWidth, rowHeight, datos.cualitativa_general_curso, footerColor, true);
+
+        currentY += rowHeight + 20;
+        doc.y = currentY; // Actualizamos la posición global de PDFKit
+    }
+
+    private dibujarRendimientoYEscalaInsumos(doc: PDFKit.PDFDocument, datos: DatosReporteInsumos) {
+        // Usar la misma lógica que dibujarRendimientoYEscala pero con datos de insumos
+        this.dibujarRendimientoYEscala(doc, {
+            ...datos,
+            calificaciones: [] // No se usa en este contexto
+        } as any);
+    }
+
+    private dibujarFirmaDocenteInsumos(doc: PDFKit.PDFDocument, datos: DatosReporteInsumos) {
+        // Usar la misma lógica que dibujarFirmaDocente
+        this.dibujarFirmaDocente(doc, datos as any);
+    }
+
+    // ========================= METODOS PARA REPORTE DE RENDIMIENTO ANUAL =============================================
+    private dibujarEncabezadoRendimientoAnual(doc: PDFKit.PDFDocument, datos: DatosRendimientoAnual) {
+        const pageWidth = doc.page.width;
+        const marginLeft = 30;
+        const marginRight = 30;
+        const encabezadoWidth = pageWidth - marginLeft - marginRight;
+        let currentY = 25; // Empezamos más arriba
+
+        // Nombre de la institución
+        doc.fontSize(10).font('Helvetica-Bold') // Bajó de 12 a 10
+            .text('UNIDAD EDUCATIVA FISCAL CINCO DE JUNIO', marginLeft, currentY, { width: encabezadoWidth, align: 'center' });
+
+        currentY += 12; // Espacio reducido
+
+        // Título del reporte
+        doc.fontSize(8.5).font('Helvetica-Bold') // Bajó de 10 a 8.5
+            .text('INFORME RENDIMIENTO ACADÉMICO ANUAL', marginLeft, currentY, { width: encabezadoWidth, align: 'center' });
+
+        currentY += 10;
+
+        // Período
+        doc.fontSize(8).font('Helvetica')
+            .text(datos.periodo.nombre, marginLeft, currentY, { width: encabezadoWidth, align: 'center' });
+
+        currentY += 12;
+
+        // Asignatura
+        const asignaturaTexto = `ASIGNATURA: ${datos.materia.nombre.toUpperCase()}`;
+        doc.fontSize(8).font('Helvetica-Bold')
+            .text(asignaturaTexto, marginLeft, currentY, { width: encabezadoWidth, align: 'center' });
+
+        currentY += 10;
+
+        // Curso y Docente
+        const cursoTexto = `${datos.curso.nivel} "${datos.curso.paralelo}"`;
+        const docenteNombre = datos.docente
+            ? `${datos.docente.apellidos} ${datos.docente.nombres}`.toUpperCase()
+            : 'SIN ASIGNAR';
+
+        doc.fontSize(8).font('Helvetica')
+            .text(`CURSO: ${cursoTexto}           DOCENTE: ${docenteNombre}`, marginLeft, currentY, { width: encabezadoWidth, align: 'center' });
+
+        currentY += 15; // Espacio final antes de la tabla reducido de 25 a 15
+
+        doc.y = currentY;
+    }
+    private dibujarTablaRendimientoAnual(doc: PDFKit.PDFDocument, datos: DatosRendimientoAnual) {
+        const pageWidth = doc.page.width;
+        const marginLeft = 20, marginBottom = 20;
+        let currentY = 90; // Posición optimizada tras el encabezado compacto
+
+        // 1. CONFIGURACIÓN DE ANCHOS
+        const col = {
+            n: 20,
+            nomina: 150,
+            trimestre: 50,
+            promAnual: 30,
+            cualAnual: 28,
+            equivalencia: 40,
+            supletorio: 35,
+            equiFinal: 40
+        };
+
+        const tableWidth = col.n + col.nomina + (col.trimestre * 3) + col.promAnual +
+            col.cualAnual + col.equivalencia + col.supletorio + col.equiFinal;
+        const startX = (pageWidth - tableWidth) / 2;
+
+        const headerHeight = 70;
+        const subH = 12;
+
+        const drawCell = (x: number, y: number, w: number, h: number, text: string, bgColor: string, isBold = false, align: 'center' | 'left' = 'center', fontSize = 5.5, textColor = '#000') => {
+            doc.rect(x, y, w, h).fillAndStroke(bgColor, '#333');
+            const textY = y + (h / 2) - (fontSize / 2);
+            doc.font(isBold ? 'Helvetica-Bold' : 'Helvetica').fontSize(fontSize).fillColor(textColor)
+                .text(text || '', x + 2, textY, { width: w - 4, align: align, lineBreak: false });
+        };
+
+        const imprimirEncabezados = (y: number) => {
+            let xP = startX;
+            drawCell(xP, y, col.n, headerHeight, 'N°', '#E0E0E0', true); xP += col.n;
+            drawCell(xP, y, col.nomina, headerHeight, 'APELLIDOS Y NOMBRES', '#E0E0E0', true); xP += col.nomina;
+
+            const totalTrimWidth = col.trimestre * 3;
+            drawCell(xP, y, totalTrimWidth, subH, 'PONDERADO ANUAL', '#D6EAF8', true);
+
+            let xSub = xP;
+            ['1° TRIM', '2° TRIM', '3° TRIM'].forEach(trim => {
+                drawCell(xSub, y + subH, col.trimestre, subH, trim, '#EBF5FB', true);
+                drawCell(xSub, y + (subH * 2), col.trimestre / 2, headerHeight - (subH * 2), 'N', '#EBF5FB', true, 'center', 5);
+                drawCell(xSub + (col.trimestre / 2), y + (subH * 2), col.trimestre / 2, headerHeight - (subH * 2), 'C', '#EBF5FB', true, 'center', 5);
+                xSub += col.trimestre;
+            });
+            xP += totalTrimWidth;
+
+            const rotadas = [
+                { w: col.promAnual, t: 'NOTA FINAL', bg: '#FCF3CF' },
+                { w: col.cualAnual, t: 'CUALIT.', bg: '#F2F2F2' },
+                { w: col.equivalencia, t: 'EQUIV.', bg: '#FEF9E7' },
+                { w: col.supletorio, t: 'SUPLE.', bg: '#F2F2F2' },
+                { w: col.equiFinal, t: 'EQUIV. FINAL', bg: '#D5F5E3' }
+            ];
+
+            rotadas.forEach(r => {
+                doc.rect(xP, y, r.w, headerHeight).fillAndStroke(r.bg, '#333');
+                this.dibujarTextoRotado(doc, r.t, xP, y, r.w, headerHeight);
+                xP += r.w;
+            });
+            return y + headerHeight;
+        };
+
+        // 2. IMPRESIÓN DE DATOS REALES
+        currentY = imprimirEncabezados(currentY);
+        const rowH = 10;
+
+        // Volvemos a la lógica real de la base de datos
+        datos.estudiantes.forEach((est, index) => {
+            // Control de salto de página por si acaso el curso es extremadamente grande (+50 alumnos)
+            if (currentY + rowH > doc.page.height - 150) { // Margen para asegurar que entren cuadros abajo
+                doc.addPage();
+                currentY = 50;
+                currentY = imprimirEncabezados(currentY);
+            }
+
+            let xP = startX;
+            const bg = index % 2 === 0 ? '#FFFFFF' : '#F9F9F9';
+
+            // N° basado en el índice real de la base de datos
+            drawCell(xP, currentY, col.n, rowH, (index + 1).toString(), bg); xP += col.n;
+            drawCell(xP, currentY, col.nomina, rowH, est.estudiante_nombre, bg, false, 'left', 5.5); xP += col.nomina;
+
+            const trims = [
+                { n: est.trimestre_1, c: est.cualitativa_1 },
+                { n: est.trimestre_2, c: est.cualitativa_2 },
+                { n: est.trimestre_3, c: est.cualitativa_3 }
+            ];
+
+            trims.forEach(t => {
+                const colorNota = t.n < 7 ? '#E74C3C' : '#000';
+                drawCell(xP, currentY, col.trimestre / 2, rowH, t.n.toFixed(2), bg, false, 'center', 5.5, colorNota);
+                drawCell(xP + (col.trimestre / 2), currentY, col.trimestre / 2, rowH, t.c, bg);
+                xP += col.trimestre;
+            });
+
+            const colorPromAnual = est.promedio_anual < 7 ? '#E74C3C' : '#000';
+            drawCell(xP, currentY, col.promAnual, rowH, est.promedio_anual.toFixed(2), '#FEF9E7', true, 'center', 5.5, colorPromAnual);
+            xP += col.promAnual;
+
+            drawCell(xP, currentY, col.cualAnual, rowH, est.cualitativa_anual, bg); xP += col.cualAnual;
+
+            const bgEqui = est.estado_antes_supletorio === 'SUPLETORIO' ? '#FADBD8' : bg;
+            drawCell(xP, currentY, col.equivalencia, rowH, est.estado_antes_supletorio, bgEqui, false, 'center', 4.5); xP += col.equivalencia;
+
+            const notaFinalTxt = est.promedio_final ? est.promedio_final.toFixed(2) : '-';
+            const colorFinalNota = (est.promedio_final && est.promedio_final < 7) ? '#E74C3C' : '#000';
+            drawCell(xP, currentY, col.supletorio, rowH, notaFinalTxt, bg, false, 'center', 5.5, colorFinalNota); xP += col.supletorio;
+
+            const bgFinal = est.estado_final === 'APROBADO' ? '#D5F5E3' : '#FADBD8';
+            drawCell(xP, currentY, col.equiFinal, rowH, est.estado_final, bgFinal, true, 'center', 4.5);
+
+            currentY += rowH;
+        });
+
+        // --- FILA DE PROMEDIOS ---
+        let xF = startX;
+        const footerBg = '#ABEBC6';
+        drawCell(xF, currentY, col.n + col.nomina, rowH, 'PROMEDIOS', footerBg, true, 'center');
+        xF += (col.n + col.nomina);
+
+        const pGlob = datos.promedios_globales;
+        [pGlob.trimestre_1, pGlob.trimestre_2, pGlob.trimestre_3].forEach(p => {
+            drawCell(xF, currentY, col.trimestre / 2, rowH, p.toFixed(2), footerBg, true);
+            drawCell(xF + (col.trimestre / 2), currentY, col.trimestre / 2, rowH, '', footerBg);
+            xF += col.trimestre;
+        });
+
+        drawCell(xF, currentY, col.promAnual, rowH, pGlob.promedio_anual.toFixed(2), footerBg, true);
+        xF += col.promAnual;
+        drawCell(xF, currentY, col.cualAnual + col.equivalencia + col.supletorio + col.equiFinal, rowH, '', footerBg);
+
+        doc.y = currentY + rowH + 5;
+    }
+
+    private dibujarCuadrosEstadisticosAnuales(doc: PDFKit.PDFDocument, datos: DatosRendimientoAnual) {
+        const startY = doc.y + 2; // Pegamos más al bloque anterior
+        const marginLeft = 35;
+        const rowH = 11; // Reducido de 14 a 11 (Ajuste clave)
+        const totalEst = datos.estudiantes.length;
+
+        // Helper para celdas con estilo
+        const drawCell = (x: number, y: number, w: number, text: string, opts: { bold?: boolean, bg?: string, align?: any } = {}) => {
+            if (opts.bg) {
+                doc.rect(x, y, w, rowH).fillAndStroke(opts.bg, '#000');
+            } else {
+                doc.rect(x, y, w, rowH).stroke('#000');
+            }
+            doc.font(opts.bold ? 'Helvetica-Bold' : 'Helvetica')
+                .fontSize(5.5)
+                .fillColor('#000')
+                // Ajustamos el y + 3 para que el texto quede centrado verticalmente en la celda de 11
+                .text(text, x + 3, y + 3, { width: w - 6, align: opts.align || 'center', lineBreak: false });
+        };
+
+        // ================================================================
+        // TABLA IZQUIERDA: INFORME RENDIMIENTO
+        // ================================================================
+        let xI = marginLeft;
+        let yI = startY;
+        const colDescW = 150;
+        const colCantW = 25;
+        const colPctW = 35;
+        const totalTableIW = colDescW + colCantW + colPctW;
+
+        drawCell(xI, yI, colDescW, 'INFORME RENDIMIENTO ACADÉMICO ANUAL', { bold: true, bg: '#F2F2F2', align: 'left' });
+        drawCell(xI + colDescW, yI, colCantW, 'C', { bold: true, bg: '#F2F2F2' });
+        drawCell(xI + colDescW + colCantW, yI, colPctW, '%', { bold: true, bg: '#F2F2F2' });
+        yI += rowH;
+
+        const filasI = [
+            { d: 'Domina los aprendizajes (DA)', v: datos.estadisticas_rendimiento.da },
+            { d: 'Alcanza los aprendizajes (AA)', v: datos.estadisticas_rendimiento.aa },
+            { d: 'Está próximo a alcanzar (PA)', v: datos.estadisticas_rendimiento.pa },
+            { d: 'No alcanza los aprendizajes (NA)', v: datos.estadisticas_rendimiento.na }
+        ];
+
+        filasI.forEach(f => {
+            const pct = totalEst > 0 ? ((f.v / totalEst) * 100).toFixed(2) + '%' : '0.00%';
+            drawCell(xI, yI, colDescW, f.d, { align: 'left' });
+            drawCell(xI + colDescW, yI, colCantW, f.v.toString());
+            drawCell(xI + colDescW + colCantW, yI, colPctW, pct);
+            yI += rowH;
+        });
+
+        drawCell(xI, yI, colDescW, 'TOTAL', { bold: true, bg: '#F2F2F2', align: 'right' });
+        drawCell(xI + colDescW, yI, colCantW, totalEst.toString(), { bold: true });
+        drawCell(xI + colDescW + colCantW, yI, colPctW, '100.00%', { bold: true });
+
+        // ================================================================
+        // TABLA DERECHA: RESUMEN ANUAL
+        // ================================================================
+        let xD = xI + totalTableIW + 15;
+        let yD = startY;
+
+        const wSeccionT = 95;
+        const wSeccionS = 95;
+        const wC = 25;
+        const wP = 35;
+        const totalTableDW = wSeccionT + wC + wP + wSeccionS + wC + wP;
+
+        drawCell(xD, yD, totalTableDW, 'RESUMEN ANUAL (APROBADOS)', { bold: true, bg: '#F2F2F2' });
+        yD += rowH;
+
+        drawCell(xD, yD, wSeccionT, 'TRIMESTRALES', { bold: true, bg: '#D6EAF8', align: 'left' });
+        drawCell(xD + wSeccionT, yD, wC, 'C', { bold: true, bg: '#D6EAF8' });
+        drawCell(xD + wSeccionT + wC, yD, wP, '%', { bold: true, bg: '#D6EAF8' });
+
+        drawCell(xD + wSeccionT + wC + wP, yD, wSeccionS, 'EXAMEN SUPLETORIO', { bold: true, bg: '#D5F5E3', align: 'left' });
+        drawCell(xD + wSeccionT + wC + wP + wSeccionS, yD, wC, 'C', { bold: true, bg: '#D5F5E3' });
+        drawCell(xD + wSeccionT + wC + wP + wSeccionS + wC, yD, wP, '%', { bold: true, bg: '#D5F5E3' });
+        yD += rowH;
+
+        const res = datos.resumen_anual;
+        const totalSupl = res.supletorio_aprobados + res.supletorio_reprobados;
+
+        const filasD = [
+            {
+                t_nom: 'APROBADOS', t_c: res.trimestral_aprobados, t_p: totalEst > 0 ? (res.trimestral_aprobados / totalEst * 100).toFixed(2) : '0',
+                s_nom: 'APROBADOS', s_c: res.supletorio_aprobados, s_p: totalSupl > 0 ? (res.supletorio_aprobados / totalSupl * 100).toFixed(2) : '0'
+            },
+            {
+                t_nom: 'SUPLETORIOS', t_c: res.trimestral_supletorios, t_p: totalEst > 0 ? (res.trimestral_supletorios / totalEst * 100).toFixed(2) : '0',
+                s_nom: 'REPROBADOS', s_c: res.supletorio_reprobados, s_p: totalSupl > 0 ? (res.supletorio_reprobados / totalSupl * 100).toFixed(2) : '0'
+            },
+            {
+                t_nom: 'REPROBADOS', t_c: res.trimestral_reprobados, t_p: totalEst > 0 ? (res.trimestral_reprobados / totalEst * 100).toFixed(2) : '0',
+                s_nom: 'NO ASISTIÓ', s_c: 0, s_p: '0.00'
+            }
+        ];
+
+        filasD.forEach(f => {
+            drawCell(xD, yD, wSeccionT, f.t_nom, { align: 'left' });
+            drawCell(xD + wSeccionT, yD, wC, f.t_c.toString());
+            drawCell(xD + wSeccionT + wC, yD, wP, f.t_p + '%');
+
+            drawCell(xD + wSeccionT + wC + wP, yD, wSeccionS, f.s_nom, { align: 'left' });
+            drawCell(xD + wSeccionT + wC + wP + wSeccionS, yD, wC, f.s_c.toString());
+            drawCell(xD + wSeccionT + wC + wP + wSeccionS + wC, yD, wP, f.s_p + '%');
+            yD += rowH;
+        });
+
+        drawCell(xD, yD, wSeccionT, 'TOTAL', { bold: true, bg: '#F2F2F2', align: 'right' });
+        drawCell(xD + wSeccionT, yD, wC, totalEst.toString(), { bold: true });
+        drawCell(xD + wSeccionT + wC, yD, wP, '100%', { bold: true });
+
+        drawCell(xD + wSeccionT + wC + wP, yD, wSeccionS, 'TOTAL SUPL.', { bold: true, bg: '#F2F2F2', align: 'right' });
+        drawCell(xD + wSeccionT + wC + wP + wSeccionS, yD, wC, totalSupl.toString(), { bold: true });
+        drawCell(xD + wSeccionT + wC + wP + wSeccionS + wC, yD, wP, '100%', { bold: true });
+
+        // Al final, dejamos solo 10 puntos de margen para que el siguiente bloque (gráfica) suba
+        doc.y = yD + 10;
+    }
+
+    // ====================================RESUMEN FINAL=========================================================
+    private dibujarResumenFinal(doc: PDFKit.PDFDocument, datos: DatosRendimientoAnual) {
+        const res = datos.resumen_final;
+        const startY = doc.y + 5;
+        const marginLeft = 40;
+        const pageWidth = 520;
+
+        // 1. FRANJA NARANJA
+        doc.rect(marginLeft, startY, pageWidth, 10)
+            .fillAndStroke('#E67E22', '#E67E22');
+        doc.fillColor('#FFF').font('Helvetica-Bold').fontSize(5.5)
+            .text('RESUMEN FINAL', marginLeft, startY + 2, { width: pageWidth, align: 'center' });
+
+        const tableY = startY + 15;
+
+        // 2. GRÁFICA CON ESPACIO SUPERIOR (Margen para el 100%)
+        const graphX = marginLeft + 10;
+        const graphW = 160;
+        const graphH = 60; // Aumentamos un poco la caja contenedora
+
+        doc.lineWidth(0.5).rect(graphX, tableY, graphW, graphH).stroke('#BDC3C7');
+
+        const barW = 25;
+        // maxBarH de 30 sobre un graphH de 60 nos deja 30 puntos de "techo" libre
+        const maxBarH = 30;
+        const baseY = tableY + graphH - 15;
+
+        // --- Barra Aprobados ---
+        const hApro = (res.aprobados / res.total_asistentes) * maxBarH;
+        doc.rect(graphX + 30, baseY - hApro, barW, hApro).fill('#2E86C1');
+
+        // Etiqueta de porcentaje (Ahora con espacio de sobra arriba)
+        doc.fillColor('#000').fontSize(5.5).font('Helvetica-Bold')
+            .text(`${res.porcentaje_aprobados}%`, graphX + 30, baseY - hApro - 9, { width: barW, align: 'center' });
+
+        doc.fontSize(5.5).text('APROBADOS', graphX + 20, baseY + 3, { width: 45, align: 'center' });
+
+        // --- Barra Reprobados ---
+        const hRepro = (res.reprobados / res.total_asistentes) * maxBarH;
+        doc.rect(graphX + 90, baseY - hRepro, barW, hRepro).fill('#CB4335');
+
+        doc.fillColor('#000').fontSize(5.5).font('Helvetica-Bold')
+            .text(`${res.porcentaje_reprobados}%`, graphX + 90, baseY - hRepro - 9, { width: barW, align: 'center' });
+
+        doc.fontSize(5.5).text('REPROBADOS', graphX + 80, baseY + 3, { width: 45, align: 'center' });
+        // 3. TABLA DE TOTALES (Misma lógica compacta)
+        const tableX = graphX + graphW + 20;
+        const colDescW = 160;
+        const colValW = 40;
+        const colPctW = 40;
+        const rowH = 13;
+
+        const drawResRow = (y: number, label: string, val: string, pct: string, color: string, isBold = false) => {
+            doc.rect(tableX, y, colDescW, rowH).fillAndStroke(color, '#000');
+            doc.fillColor('#000').font(isBold ? 'Helvetica-Bold' : 'Helvetica').fontSize(5.5)
+                .text(label, tableX + 5, y + 3.5, { width: colDescW - 10, align: 'left' });
+
+            doc.rect(tableX + colDescW, y, colValW, rowH).stroke('#000');
+            doc.text(val, tableX + colDescW, y + 3.5, { width: colValW, align: 'center' });
+
+            doc.rect(tableX + colDescW + colValW, y, colPctW, rowH).stroke('#000');
+            doc.text(pct, tableX + colDescW + colValW, y + 3.5, { width: colPctW, align: 'center' });
+        };
+
+        drawResRow(tableY, 'ALUMNOS APROBADOS', res.aprobados.toString(), res.porcentaje_aprobados + '%', '#D6EAF8');
+        drawResRow(tableY + rowH, 'ALUMNOS REPROBADOS', res.reprobados.toString(), res.porcentaje_reprobados + '%', '#FADBD8');
+        drawResRow(tableY + (rowH * 2), 'TOTAL DE ESTUDIANTES ASISTENTE', res.total_asistentes.toString(), '100%', '#EBEDEF', true);
+
+        doc.y = tableY + (rowH * 3) + 15;
+    }
+    private dibujarFirmaDocenteAnual(doc: PDFKit.PDFDocument, datos: DatosRendimientoAnual) {
+        this.dibujarFirmaDocente(doc, datos as any);
     }
 }

@@ -5,9 +5,10 @@ import { UpdateMateriaCursoDto } from './dto/update-materia-curso.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { DocenteGuard } from '../auth/guards/docente.guard';
+import { DocenteOrAdminGuard } from '../auth/guards/docente-or-admin.guard';
 
-@Controller('materia-curso')
 @UseGuards(JwtAuthGuard)
+@Controller('materia-curso')
 export class MateriaCursoController {
   constructor(private readonly materiaCursoService: MateriaCursoService) {}
 
@@ -23,7 +24,7 @@ export class MateriaCursoController {
     return this.materiaCursoService.findAll();
   }
 
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   @Get(':id')
   findOne(@Param('id') id: string, @Req() req) {
     return this.materiaCursoService.findOne(id, req.user.docente_id);
@@ -35,7 +36,7 @@ export class MateriaCursoController {
     return this.materiaCursoService.findByCurso(curso_id);
   }
 
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   @Get('docente/:docente_id')
   findByDocente(@Param('docente_id') docente_id: string) {
     return this.materiaCursoService.findByDocente(docente_id);

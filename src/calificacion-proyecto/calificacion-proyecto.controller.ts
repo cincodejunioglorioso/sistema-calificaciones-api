@@ -7,9 +7,10 @@ import { TutorGuard } from '../auth/guards/tutor.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { Role } from '../usuarios/entities/usuario.entity';
 import { DocenteGuard } from '../auth/guards/docente.guard';
+import { DocenteOrAdminGuard } from '../auth/guards/docente-or-admin.guard';
 
-@Controller('calificacion-proyecto')
 @UseGuards(JwtAuthGuard)
+@Controller('calificacion-proyecto')
 export class CalificacionProyectoController {
   constructor(private readonly calificacionProyectoService: CalificacionProyectoService) {}
 
@@ -31,7 +32,7 @@ export class CalificacionProyectoController {
 
   // 🎓 TUTOR + 👑 ADMIN: Obtener calificación por ID
   @Get(':id')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async findOne(@Param('id') id: string, @Req() req) {
     const docente_id = req.user.rol === Role.DOCENTE ? req.user.docente_id : undefined;
     return await this.calificacionProyectoService.findOne(id, docente_id);
@@ -39,7 +40,7 @@ export class CalificacionProyectoController {
 
   // 🎓 TUTOR + 👑 ADMIN: Listar por curso y trimestre
   @Get('curso/:curso_id/trimestre/:trimestre_id')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async findByCursoYTrimestre(
     @Param('curso_id') curso_id: string,
     @Param('trimestre_id') trimestre_id: string,
@@ -55,7 +56,7 @@ export class CalificacionProyectoController {
 
   // 🎓 TUTOR + 👑 ADMIN: Estudiantes sin calificar
   @Get('curso/:curso_id/trimestre/:trimestre_id/sin-calificar')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async estudiantesSinCalificar(
     @Param('curso_id') curso_id: string,
     @Param('trimestre_id') trimestre_id: string,
@@ -71,14 +72,14 @@ export class CalificacionProyectoController {
 
   // 🎓 TUTOR + 👑 ADMIN: Historial de un estudiante
   @Get('estudiante/:estudiante_id')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async findByEstudiante(@Param('estudiante_id') estudiante_id: string) {
     return await this.calificacionProyectoService.findByEstudiante(estudiante_id);
   }
 
   // 🎓 TUTOR: Actualizar calificación
   @Patch(':id')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async update(
     @Param('id') id: string,
     @Body() updateDto: UpdateCalificacionProyectoDto,
@@ -94,7 +95,7 @@ export class CalificacionProyectoController {
 
   // 🎓 TUTOR + 👑 ADMIN: Eliminar calificación
   @Delete(':id')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async remove(@Param('id') id: string, @Req() req) {
     const docente_id = req.user.rol === Role.DOCENTE ? req.user.docente_id : undefined;
     return await this.calificacionProyectoService.remove(id, docente_id);

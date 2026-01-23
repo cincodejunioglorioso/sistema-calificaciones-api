@@ -22,6 +22,9 @@ export class CalificacionExamen {
     @Column({ type: 'uuid' })
     docente_id: string;
 
+    @Column({ type: 'decimal', precision: 4, scale: 2, nullable: true })
+    calificacion_original: number | null;
+
     @Column({ type: 'decimal', precision: 4, scale: 2 })
     calificacion_examen: number;
 

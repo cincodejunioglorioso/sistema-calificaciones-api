@@ -10,10 +10,10 @@ import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { DocenteGuard } from '../auth/guards/docente.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { DocenteOrAdminGuard } from '../auth/guards/docente-or-admin.guard';
 
-
-@Controller('matriculas')
 @UseGuards(JwtAuthGuard)
+@Controller('matriculas')
 export class MatriculasController {
   constructor(private readonly matriculasService: MatriculasService) {}
 
@@ -41,7 +41,7 @@ export class MatriculasController {
     return this.matriculasService.update(id, updateMatriculaDto);
   }
 
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   @Get('curso/:curso_id')
   findByCurso(@Param('curso_id') curso_id: string) {
     return this.matriculasService.findByCurso(curso_id);

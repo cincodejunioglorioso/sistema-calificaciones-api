@@ -5,8 +5,8 @@ import { Repository } from 'typeorm';
 import { PromedioTrimestre } from '../../promedio-trimestre/entities/promedio-trimestre.entity';
 import { MateriaCurso } from '../../materia-curso/entities/materia-curso.entity';
 import { Matricula } from '../../matriculas/entities/matricula.entity';
-import { CalificacionCualitativa } from '../../common/enums/cualitativa.enum';
-import { calcularCalificacionCualitativa } from '../../common/constants/escalas.constants';
+import { ConversionCualitativa } from '../../common/enums/cualitativa.enum';
+import { calcularConversionCualitativa } from '../../common/constants/escalas.constants';
 import { TrimestresService } from '../../trimestres/trimestres.service';
 import { TiposEvaluacionService } from '../../tipos-evaluacion/tipos-evaluacion.service';
 import { 
@@ -100,7 +100,7 @@ export class ReporteMateriaService {
           nota_examen: promedio?.nota_examen ? Number(promedio.nota_examen) : null,
           ponderado_examen: promedio?.ponderado_examen ? Number(promedio.ponderado_examen) : null,
           nota_final: promedio ? Number(promedio.nota_final_trimestre) : 0,
-          cualitativa: promedio?.cualitativa || CalificacionCualitativa.NA,
+          cualitativa: promedio?.cualitativa || ConversionCualitativa.NA,
         };
       })
     );
@@ -155,10 +155,10 @@ export class ReporteMateriaService {
       : 0;
     
     const distribucion_cualitativa = {
-      DA: calificaciones.filter(c => c.cualitativa === CalificacionCualitativa.DA).length,
-      AA: calificaciones.filter(c => c.cualitativa === CalificacionCualitativa.AA).length,
-      PA: calificaciones.filter(c => c.cualitativa === CalificacionCualitativa.PA).length,
-      NA: calificaciones.filter(c => c.cualitativa === CalificacionCualitativa.NA).length,
+      DA: calificaciones.filter(c => c.cualitativa === ConversionCualitativa.DA).length,
+      AA: calificaciones.filter(c => c.cualitativa === ConversionCualitativa.AA).length,
+      PA: calificaciones.filter(c => c.cualitativa === ConversionCualitativa.PA).length,
+      NA: calificaciones.filter(c => c.cualitativa === ConversionCualitativa.NA).length,
     };
     
     return {

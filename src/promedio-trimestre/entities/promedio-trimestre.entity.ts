@@ -2,7 +2,7 @@ import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGenerat
 import { Estudiante } from "../../estudiantes/entities/estudiante.entity";
 import { MateriaCurso } from "../../materia-curso/entities/materia-curso.entity";
 import { Trimestre } from "../../trimestres/entities/trimestre.entity";
-import { CalificacionCualitativa } from "../../common/enums/cualitativa.enum";
+import { ConversionCualitativa } from "../../common/enums/cualitativa.enum";
 
 @Entity('promedio_trimestre')
 @Unique(['estudiante_id', 'materia_curso_id', 'trimestre_id'])
@@ -41,8 +41,8 @@ export class PromedioTrimestre {
     @Column({ type: 'decimal', precision: 4, scale: 2 })
     nota_final_trimestre: number;
 
-    @Column({ type: 'enum', enum: CalificacionCualitativa })
-    cualitativa: CalificacionCualitativa;
+    @Column({ type: 'enum', enum: ConversionCualitativa })
+    cualitativa: ConversionCualitativa;
 
     @Column({ type: 'text', nullable: true })
     observaciones: string;

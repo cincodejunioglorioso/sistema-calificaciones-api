@@ -6,15 +6,16 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { DocenteGuard } from '../auth/guards/docente.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { Role } from '../usuarios/entities/usuario.entity';
+import { DocenteOrAdminGuard } from '../auth/guards/docente-or-admin.guard';
 
-@Controller('calificacion-insumo')
 @UseGuards(JwtAuthGuard)
+@Controller('calificacion-insumo')
 export class CalificacionInsumoController {
   constructor(private readonly calificacionInsumoService: CalificacionInsumoService) {}
 
   // 🎓 DOCENTE: Crear calificación (individual o batch)
   @Post()
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async create(
     @Body() createCalificacionInsumoDto: CreateCalificacionInsumoDto,
     @Req() req
@@ -38,7 +39,7 @@ export class CalificacionInsumoController {
 
   // 👑 ADMIN + 🎓 DOCENTE: Listar calificaciones de un insumo  
   @Get('insumo/:insumo_id')
-  @UseGuards()
+  @UseGuards(DocenteOrAdminGuard)
   async findByInsumo(
     @Param('insumo_id') insumo_id: string,
     @Req() req
@@ -78,7 +79,7 @@ export class CalificacionInsumoController {
 
   // 🎓 DOCENTE: Actualizar calificación (solo en estado ACTIVO)
   @Patch(':id')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async update(
     @Param('id') id: string,
     @Body() updateDto: UpdateCalificacionInsumoDto,

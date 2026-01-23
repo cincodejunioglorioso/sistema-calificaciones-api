@@ -7,6 +7,12 @@ export enum EstadoPeriodo {
     FINALIZADO = 'FINALIZADO'
 }
 
+export enum EstadoSupletorio {
+    PENDIENTE = 'PENDIENTE',
+    ACTIVADO = 'ACTIVADO',
+    CERRADO = 'CERRADO'
+}
+
 @Entity('periodos_lectivos')
 export class PeriodoLectivo {
 
@@ -25,6 +31,9 @@ export class PeriodoLectivo {
     @Column({ type: 'enum', enum: EstadoPeriodo, default: EstadoPeriodo.ACTIVO })
     estado: EstadoPeriodo;
 
+    @Column({ type: 'enum', enum: EstadoSupletorio, default: EstadoSupletorio.PENDIENTE })
+    estado_supletorio: EstadoSupletorio;
+    
     @CreateDateColumn()
     createdAt: Date;
 

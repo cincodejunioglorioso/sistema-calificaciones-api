@@ -5,28 +5,29 @@ import { UpdateTrimestreDto } from './dto/update-trimestre.dto';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { DocenteGuard } from '../auth/guards/docente.guard';
+import { DocenteOrAdminGuard } from '../auth/guards/docente-or-admin.guard';
 
-@Controller('trimestres')
 @UseGuards(JwtAuthGuard)
+@Controller('trimestres')
 export class TrimestresController {
   constructor(private readonly trimestresService: TrimestresService) {}
 
   // 🌍 ADMIN + DOCENTE: Trimestres del período actual
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(DocenteOrAdminGuard)
   @Get('periodo-activo')
   findTrimestrePeriodoActual() {
     return this.trimestresService.findTrimestresPeriodoActual();
   }
 
   // 🌍 ADMIN + DOCENTE: Trimestre activo actual
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(DocenteOrAdminGuard)
   @Get('activo')
   findTrimestreActivo() {
     return this.trimestresService.findTrimestreActivo();
   }
 
   // 👑 ADMIN: Ver trimestres de un período específico
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(DocenteOrAdminGuard)
   @Get('periodo/:periodoId')
   findTrimestresByPeriodo(@Param('periodoId') periodoId: string) {
     return this.trimestresService.findTrimestresByPeriodo(periodoId);

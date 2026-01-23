@@ -5,6 +5,7 @@ import { AdminGuard } from '../auth/guards/admin.guard';
 import { InsumosService } from './insumos.service';
 import { CreateInsumoDto } from './dto/create-insumo.dto';
 import { UpdateInsumoDto } from './dto/update-insumo.dto';
+import { DocenteOrAdminGuard } from '../auth/guards/docente-or-admin.guard';
 
 @UseGuards(JwtAuthGuard)
 @Controller('insumos')
@@ -12,7 +13,7 @@ export class InsumosController {
   constructor(private readonly insumosService: InsumosService) {}
 
   // 🎓 DOCENTE: Crear insumo
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   @Post()
   create(@Body() createInsumoDto: CreateInsumoDto, @Request() req) {
     return this.insumosService.create(
@@ -53,7 +54,7 @@ export class InsumosController {
   }
 
   // 🎓 DOCENTE: Actualizar
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   @Put(':id')
   update(
     @Param('id') id: string,
@@ -64,7 +65,7 @@ export class InsumosController {
   }
 
   // 🎓 DOCENTE: Publicar
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   @Patch(':id/publicar')
   publicar(@Param('id') id: string, @Request() req) {
     return this.insumosService.publicar(id, req.user.docente_id);
@@ -78,7 +79,7 @@ export class InsumosController {
   }
 
   // 🎓 DOCENTE: Eliminar
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   @Delete(':id')
   remove(@Param('id') id: string, @Request() req) {
     return this.insumosService.remove(id, req.user.docente_id);

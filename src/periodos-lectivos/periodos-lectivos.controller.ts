@@ -6,13 +6,13 @@ import { AdminGuard } from '../auth/guards/admin.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TrimestresService } from '../trimestres/trimestres.service';
 
-@Controller('periodos-lectivos')
 @UseGuards(JwtAuthGuard)
+@Controller('periodos-lectivos')
 export class PeriodosLectivosController {
   constructor(
     private readonly periodosLectivosService: PeriodosLectivosService,
     private readonly trimestresService: TrimestresService
-  ) {}
+  ) { }
 
   // 👑 ADMIN: Crear período lectivo
   @UseGuards(AdminGuard)
@@ -27,7 +27,7 @@ export class PeriodosLectivosController {
   findAll() {
     return this.periodosLectivosService.findAll();
   }
-  
+
   // 👑 ADMIN + 🎓 DOCENTE: Período activo
   @Get('/periodo-activo')
   findActivo() {
@@ -52,7 +52,7 @@ export class PeriodosLectivosController {
   @UseGuards(AdminGuard)
   @Put(':id')
   update(
-    @Param('id') id: string, 
+    @Param('id') id: string,
     @Body() updatePeriodoLectivoDto: UpdatePeriodoLectivoDto
   ) {
     return this.periodosLectivosService.update(id, updatePeriodoLectivoDto);
@@ -70,5 +70,33 @@ export class PeriodosLectivosController {
   @Patch(':id/cambiar-estado')
   cambiarEstado(@Param('id') id: string) {
     return this.periodosLectivosService.cambiarEstado(id);
+  }
+
+  // 👑 ADMIN: Activar período de supletorios: ACTIVO → SUPLETORIOS
+  @UseGuards(AdminGuard)
+  @Patch(':id/activar-supletorios')
+  async activarSupletorios(@Param('id') id: string) {
+    return await this.periodosLectivosService.activarSupletorios(id);
+  }
+
+  // 👑 ADMIN: Cerrar período de supletorios (no finaliza el período): SUPLETORIOS → SUPLETORIOS_CERRADOS
+  @UseGuards(AdminGuard)
+  @Patch(':id/cerrar-supletorios')
+  async cerrarSupletorios(@Param('id') id: string) {
+    return await this.periodosLectivosService.cerrarSupletorios(id);
+  }
+
+  // 👑 ADMIN: Reabrir supletorios (si se cerró por error): SUPLETORIOS_CERRADOS → SUPLETORIOS
+  @UseGuards(AdminGuard)
+  @Patch(':id/reabrir-supletorios')
+  async reabrirSupletorios(@Param('id') id: string) {
+    return await this.periodosLectivosService.reabrirSupletorios(id);
+  }
+
+  // 👑 ADMIN: Regresar supletorios a PENDIENTE (elimina datos): ACTIVADO → PENDIENTE
+  @UseGuards(AdminGuard)
+  @Patch(':id/regresar-supletorios-pendiente')
+  async regresarSupletoriosPendiente(@Param('id') id: string) {
+    return await this.periodosLectivosService.regresarSupletoriosPendiente(id);
   }
 }

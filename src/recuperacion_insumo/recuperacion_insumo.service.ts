@@ -281,10 +281,10 @@ export class RecuperacionInsumoService {
       nota_final = Number(((nota_original + nota_recuperacion_1) / 2).toFixed(2));
 
     } else if (recuperaciones.length === 2) {
-      const nota_original = Number(calificacion.nota_original);
+      const nota_final_actual = Number(calificacion.nota_final);
       const nota_recuperacion_2 = Number(recuperaciones[1].nota_recuperacion);
 
-      nota_final = Number(((nota_original + nota_recuperacion_2) / 2).toFixed(2));
+      nota_final = Number(((nota_final_actual + nota_recuperacion_2) / 2).toFixed(2));
     }
 
     calificacion.nota_final = nota_final;

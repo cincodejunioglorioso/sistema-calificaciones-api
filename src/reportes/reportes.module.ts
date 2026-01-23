@@ -19,6 +19,13 @@ import { PromedioTrimestreModule } from '../promedio-trimestre/promedio-trimestr
 import { TiposEvaluacionModule } from '../tipos-evaluacion/tipos-evaluacion.module';
 import { CursosModule } from '../cursos/cursos.module';
 import { PdfGeneratorService } from './services/pdf-generator.service';
+import { CalificacionCualitativaModule } from '../calificacion-cualitativa/calificacion-cualitativa.module';
+import { ReporteConcentradoService } from './services/reporte-concentrado.service';
+import { Insumo } from '../insumos/entities/insumo.entity';
+import { CalificacionInsumo } from '../calificacion_insumo/entities/calificacion_insumo.entity';
+import { ReporteInsumosService } from './services/reporte-insumos.service';
+import { ReporteRendimientoAnualService } from './services/reporte-rendimiento-anual.service';
+import { PeriodoLectivo } from '../periodos-lectivos/entities/periodos-lectivo.entity';
 
 @Module({
   imports: [
@@ -28,18 +35,26 @@ import { PdfGeneratorService } from './services/pdf-generator.service';
       Matricula,
       MateriaCurso,
       Trimestre,
+      Insumo,
+      CalificacionInsumo,
+      PromedioPeriodo,
+      PeriodoLectivo
     ]),
     EstudiantesModule,
     TrimestresModule,
     PromedioTrimestreModule,
     TiposEvaluacionModule,
     CursosModule,
+    CalificacionCualitativaModule,
   ],
   controllers: [ReportesController],
   providers: [
     ReportesService,
     ReporteEstudianteService,
     ReporteMateriaService,
+    ReporteConcentradoService,
+    ReporteInsumosService,
+    ReporteRendimientoAnualService,
     PdfGeneratorService
   ],
   exports: [ReportesService],

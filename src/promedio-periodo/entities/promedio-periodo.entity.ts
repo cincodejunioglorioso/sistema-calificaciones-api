@@ -1,5 +1,5 @@
 import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from "typeorm";
-import { CalificacionCualitativa } from "../../common/enums/cualitativa.enum";
+import { ConversionCualitativa } from "../../common/enums/cualitativa.enum";
 import { Estudiante } from "../../estudiantes/entities/estudiante.entity";
 import { MateriaCurso } from "../../materia-curso/entities/materia-curso.entity";
 import { PeriodoLectivo } from "../../periodos-lectivos/entities/periodos-lectivo.entity";
@@ -38,17 +38,17 @@ export class PromedioPeriodo {
     @Column({ type: 'decimal', precision: 4, scale: 2 })
     promedio_anual: number;
 
-    @Column({ type: 'enum', enum: CalificacionCualitativa })
-    cualitativa_anual: CalificacionCualitativa;  
+    @Column({ type: 'enum', enum: ConversionCualitativa })
+    cualitativa_anual: ConversionCualitativa;  
 
     @Column({ type: 'decimal', precision: 4, scale: 2, nullable: true })
-    nota_supletorio: number;
+    nota_supletorio: number | null;
 
     @Column({ type: 'decimal', precision: 4, scale: 2, nullable: true })
-    promedio_final: number;
+    promedio_final: number | null;
 
-    @Column({ type: 'enum', enum: CalificacionCualitativa, nullable: true })
-    cualitativa_final: CalificacionCualitativa;
+    @Column({ type: 'enum', enum: ConversionCualitativa, nullable: true })
+    cualitativa_final: ConversionCualitativa | null;
     
     @Column({ type: 'enum', enum: EstadoPromedioAnual })
     estado: EstadoPromedioAnual;

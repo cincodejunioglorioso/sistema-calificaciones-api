@@ -9,7 +9,7 @@ import { TrimestresService } from '../trimestres/trimestres.service';
 import { DocentesService } from '../docentes/docentes.service';
 import { EstadoPeriodo } from '../periodos-lectivos/entities/periodos-lectivo.entity';
 import { Estado } from '../usuarios/entities/usuario.entity'
-import { UsuariosService } from '../usuarios/usuarios.service';
+import { MateriaCursoService } from '../materia-curso/materia-curso.service';
 
 @Injectable()
 export class CursosService {
@@ -19,6 +19,7 @@ export class CursosService {
     private readonly periodosLectivosService: PeriodosLectivosService,
     private readonly trimestresService: TrimestresService,
     private readonly docentesService: DocentesService,
+    private readonly materiaCursoService: MateriaCursoService,
   ) { }
 
   // 👑 ADMIN: Crear curso
@@ -212,11 +213,14 @@ export class CursosService {
     const curso = await this.findOne(id);
 
     // Validar que el período del curso esté activo
-    if (curso.periodo_lectivo.estado !== 'ACTIVO') {
+    if (curso.periodo_lectivo.estado !== EstadoPeriodo.ACTIVO) {
       throw new BadRequestException('No se pueden modificar cursos de períodos lectivos finalizados');
     }
 
-    // 🆕 VALIDAR DOCENTE SI SE ESTÁ ACTUALIZANDO
+    // 🆕 GUARDAR EL TUTOR ANTERIOR
+    const tutorAnterior = curso.docente_id;
+
+    // VALIDAR DOCENTE SI SE ESTÁ ACTUALIZANDO
     if (updateCursoDto.docente_id !== undefined) {
       if (updateCursoDto.docente_id) {
         const docente = await this.docentesService.findOne(updateCursoDto.docente_id);
@@ -244,7 +248,7 @@ export class CursosService {
       }
     }
 
-    // Si se está actualizando algo que afecta la unicidad, validar
+    // Validar unicidad si se cambia nivel/paralelo/especialidad
     if (updateCursoDto.nivel || updateCursoDto.paralelo || updateCursoDto.especialidad) {
       const nuevoNivel = updateCursoDto.nivel || curso.nivel;
       const nuevoParalelo = (updateCursoDto.paralelo || curso.paralelo).toUpperCase();
@@ -267,18 +271,42 @@ export class CursosService {
       }
     }
 
-    // Normalizar paralelo si se está actualizando
+    // Normalizar paralelo
     if (updateCursoDto.paralelo) {
       updateCursoDto.paralelo = updateCursoDto.paralelo.toUpperCase();
     }
 
+    // Actualizar curso
     await this.cursoRepository.update(id, updateCursoDto);
+
+    // 🆕 GESTIONAR COMPONENTES CUALITATIVOS AL CAMBIAR TUTOR
+    if (updateCursoDto.docente_id !== undefined && updateCursoDto.docente_id !== tutorAnterior) {
+
+      // CASO 1: Se asigna un tutor por primera vez (antes era null)
+      if (!tutorAnterior && updateCursoDto.docente_id) {
+        await this.materiaCursoService.asignarComponentesCualitativosTutor(
+          id,
+          updateCursoDto.docente_id
+        );
+      }
+
+      // CASO 2: Se cambia de tutor (había uno antes y ahora es otro)
+      else if (tutorAnterior && updateCursoDto.docente_id) {
+        await this.materiaCursoService.reasignarComponentesCualitativosANuevoTutor(
+          id,
+          updateCursoDto.docente_id
+        );
+      }
+
+      // CASO 3: Se REMUEVE el tutor (pasa a null) - NO hacemos nada
+      // ⚠️ Las calificaciones ya registradas se mantienen
+    }
 
     const cursoActualizado = await this.findOne(id);
 
     return {
       message: 'Curso actualizado exitosamente',
-      curso: cursoActualizado
+      curso: cursoActualizado,
     };
   }
 

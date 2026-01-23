@@ -8,8 +8,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TutorGuard } from '../auth/guards/tutor.guard';
 import { UpdateDatosPersonalesDto } from './dto/update-datos-personales.dto';
 
-@Controller('estudiantes')
 @UseGuards(JwtAuthGuard)
+@Controller('estudiantes')
 export class EstudiantesController {
   constructor(private readonly estudiantesService: EstudiantesService) {}
 

@@ -4,7 +4,9 @@ import { AdminGuard } from '../auth/guards/admin.guard';
 import { CreateMateriaDto } from './dto/create-materia.dto';
 import { UpdateMateriaDto } from './dto/update-materia.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { DocenteOrAdminGuard } from '../auth/guards/docente-or-admin.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('materias')
 export class MateriasController {
   constructor(private readonly materiasService: MateriasService) {}
@@ -15,7 +17,7 @@ export class MateriasController {
     return this.materiasService.create(createMateriaDto);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(DocenteOrAdminGuard)
   @Get()
   findAll() {
     return this.materiasService.findAll();

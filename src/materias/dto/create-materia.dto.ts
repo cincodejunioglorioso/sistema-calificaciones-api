@@ -1,5 +1,5 @@
 import { IsString, IsEnum, IsOptional, Length, MaxLength } from 'class-validator';
-import { NivelEducativo, TrimestreAplicable } from '../entities/materia.entity';
+import { NivelEducativo, TipoCalificacion,  } from '../entities/materia.entity';
 
 export class CreateMateriaDto {
   @IsString({ message: 'El nombre es requerido' })
@@ -11,8 +11,8 @@ export class CreateMateriaDto {
   nivelEducativo: NivelEducativo;
 
   @IsOptional()
-  @IsEnum(TrimestreAplicable, { 
-    message: 'El trimestre aplicable debe ser TODOS, PRIMER_TRIMESTRE, SEGUNDO_TRIMESTRE o TERCER_TRIMESTRE' 
+  @IsEnum(TipoCalificacion, { 
+    message: 'El tipo de calificación debe ser CUALITATIVA o CUANTITATIVA' 
   })
-  trimestreAplicable?: TrimestreAplicable;
+  tipoCalificacion?: TipoCalificacion;
 }

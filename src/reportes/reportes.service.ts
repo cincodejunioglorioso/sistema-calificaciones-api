@@ -8,12 +8,21 @@ import { PdfGeneratorService } from './services/pdf-generator.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EstadoMatricula, Matricula } from '../matriculas/entities/matricula.entity';
 import { Repository } from 'typeorm';
+import { DatosConcentradoCalificaciones } from './interfaces/datos-concentrado.interface';
+import { ReporteConcentradoService } from './services/reporte-concentrado.service';
+import { DatosReporteInsumos } from './interfaces/datos-reporte-insumos.interface';
+import { ReporteInsumosService } from './services/reporte-insumos.service';
+import { ReporteRendimientoAnualService } from './services/reporte-rendimiento-anual.service';
+import { DatosRendimientoAnual } from './interfaces/datos-rendimiento-anual.interface';
 
 @Injectable()
 export class ReportesService {
   constructor(
     private readonly reporteEstudianteService: ReporteEstudianteService,
     private readonly reporteMateriaService: ReporteMateriaService,
+    private readonly reporteConcentradoService: ReporteConcentradoService,
+    private readonly reporteInsumosService: ReporteInsumosService,
+    private readonly reporteRendimientoAnualService: ReporteRendimientoAnualService,
     private readonly pdfGeneratorService: PdfGeneratorService,
     @InjectRepository(Matricula)
     private readonly matriculaRepository: Repository<Matricula>,
@@ -36,14 +45,14 @@ export class ReportesService {
     );
   }
 
- // Genera datos para libreta usando matricula_id 
+  // Genera datos para libreta usando matricula_id 
   async generarDatosLibretaPorMatricula(
     matricula_id: string
   ): Promise<DatosLibretaEstudiante> {
     return this.reporteEstudianteService.obtenerDatosLibretaPorMatricula(matricula_id);
   }
 
-  
+
   // Genera PDF de libreta usando matricula_id
   async generarLibretaPorMatriculaPDF(
     matricula_id: string
@@ -128,4 +137,86 @@ export class ReportesService {
     const datos = await this.generarDatosReporteMateria(materia_curso_id, trimestre_id);
     return this.pdfGeneratorService.generarReporteMateriaPDF(datos);
   }
+
+  /**
+   * Genera datos para concentrado de calificaciones
+   */
+  async generarDatosConcentrado(
+    curso_id: string,
+    trimestre_id: string,
+    docente_id?: string
+  ): Promise<DatosConcentradoCalificaciones> {
+    return this.reporteConcentradoService.obtenerDatosConcentrado(
+      curso_id,
+      trimestre_id,
+      docente_id
+    );
+  }
+
+  /**
+   * Genera PDF de concentrado de calificaciones
+   */
+  async generarConcentradoPDF(
+    curso_id: string,
+    trimestre_id: string,
+    docente_id?: string
+  ): Promise<Buffer> {
+    const datos = await this.generarDatosConcentrado(
+      curso_id,
+      trimestre_id,
+      docente_id
+    );
+    return this.pdfGeneratorService.generarConcentradoPDF(datos);
+  }
+
+  /**
+ * Genera datos para reporte de insumos
+ */
+  async generarDatosReporteInsumos(
+    materia_curso_id: string,
+    trimestre_id: string
+  ): Promise<DatosReporteInsumos> {
+    return this.reporteInsumosService.obtenerDatosReporteInsumos(
+      materia_curso_id,
+      trimestre_id
+    );
+  }
+
+  /**
+   * Genera PDF de reporte de insumos
+   */
+  async generarReporteInsumosPDF(
+    materia_curso_id: string,
+    trimestre_id: string
+  ): Promise<Buffer> {
+    const datos = await this.generarDatosReporteInsumos(materia_curso_id, trimestre_id);
+    return this.pdfGeneratorService.generarReporteInsumosPDF(datos);
+  }
+
+  /**
+ * Genera datos para reporte de rendimiento académico anual
+ */
+async generarDatosRendimientoAnual(
+  materia_curso_id: string,
+  periodo_lectivo_id: string
+): Promise<DatosRendimientoAnual> {
+  return this.reporteRendimientoAnualService.obtenerDatosRendimientoAnual(
+    materia_curso_id,
+    periodo_lectivo_id
+  );
+}
+
+/**
+ * Genera PDF de reporte de rendimiento académico anual
+ */
+async generarRendimientoAnualPDF(
+  materia_curso_id: string,
+  periodo_lectivo_id: string
+): Promise<Buffer> {
+  const datos = await this.generarDatosRendimientoAnual(
+    materia_curso_id,
+    periodo_lectivo_id
+  );
+  return this.pdfGeneratorService.generarRendimientoAnualPDF(datos);
+}
 }

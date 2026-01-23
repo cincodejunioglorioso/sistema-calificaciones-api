@@ -21,6 +21,8 @@ import { CalificacionExamenModule } from './calificacion-examen/calificacion-exa
 import { PromedioTrimestreModule } from './promedio-trimestre/promedio-trimestre.module';
 import { PromedioPeriodoModule } from './promedio-periodo/promedio-periodo.module';
 import { ReportesModule } from './reportes/reportes.module';
+import { CalificacionCualitativaModule } from './calificacion-cualitativa/calificacion-cualitativa.module';
+import { RecuperacionExamenModule } from './recuperacion-examen/recuperacion-examen.module';
 
 @Module({  
   imports: [
@@ -79,7 +81,12 @@ import { ReportesModule } from './reportes/reportes.module';
 
     PromedioPeriodoModule,
 
-    ReportesModule
+    ReportesModule,
+
+    CalificacionCualitativaModule,
+
+    RecuperacionExamenModule,
+
   ],
 })
 export class AppModule {} 

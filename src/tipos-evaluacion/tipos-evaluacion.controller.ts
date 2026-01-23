@@ -5,6 +5,7 @@ import { UpdateTipoEvaluacionDto } from './dto/update-tipos-evaluacion.dto';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('tipos-evaluacion')
 export class TiposEvaluacionController {
   constructor(private readonly tiposEvaluacionService: TiposEvaluacionService) { }

@@ -7,8 +7,8 @@ import { DocenteGuard } from '../auth/guards/docente.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { Role } from '../usuarios/entities/usuario.entity';
 
-@Controller('recuperacion-insumo')
 @UseGuards(JwtAuthGuard)
+@Controller('recuperacion-insumo')
 export class RecuperacionInsumoController {
   constructor(private readonly recuperacionInsumoService: RecuperacionInsumoService) {}
 

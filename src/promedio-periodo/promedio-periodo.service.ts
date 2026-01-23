@@ -1,6 +1,6 @@
 // nest-backend/src/promedio-periodo/promedio-periodo.service.ts
 
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EstadoPromedioAnual, PromedioPeriodo } from './entities/promedio-periodo.entity';
@@ -10,10 +10,11 @@ import { RegistrarSupletorioDto } from './dto/registrar-supletorio.dto';
 import { PromedioTrimestre } from '../promedio-trimestre/entities/promedio-trimestre.entity';
 import { Matricula, EstadoMatricula } from '../matriculas/entities/matricula.entity';
 import { MateriaCurso } from '../materia-curso/entities/materia-curso.entity';
-import { PeriodoLectivo, EstadoPeriodo } from '../periodos-lectivos/entities/periodos-lectivo.entity';
+import { PeriodoLectivo, EstadoPeriodo, EstadoSupletorio } from '../periodos-lectivos/entities/periodos-lectivo.entity';
 import { Trimestre, TrimestreEstado } from '../trimestres/entities/trimestre.entity';
-import { calcularCalificacionCualitativa } from '../common/constants/escalas.constants';
+import { calcularConversionCualitativa } from '../common/constants/escalas.constants';
 import { ResultadoGeneracionPeriodoMasiva } from './dto/resultado-generacion-masiva.interface';
+import { ConversionCualitativa } from '../common/enums/cualitativa.enum';
 
 @Injectable()
 export class PromedioPeriodoService {
@@ -131,7 +132,7 @@ export class PromedioPeriodoService {
     );
 
     // Calcular cualitativa anual
-    const cualitativa_anual = calcularCalificacionCualitativa(promedio_anual);
+    const cualitativa_anual = calcularConversionCualitativa(promedio_anual);
 
     // Determinar estado
     let estado: EstadoPromedioAnual;
@@ -272,58 +273,52 @@ export class PromedioPeriodoService {
     };
   }
 
-  /**
-   * 🎓 DOCENTE: Registrar nota de supletorio
-   * Solo el docente de la materia puede registrar la nota
-   * Nota máxima de supletorio: 7.0
-   */
+  // 🎓 DOCENTE: Registrar nota de supletorio
   async registrarSupletorio(id: string, dto: RegistrarSupletorioDto, docente_id: string) {
     const promedioPeriodo = await this.findOne(id);
 
-    // Validar que esté en estado SUPLETORIO
-    if (promedioPeriodo.estado !== EstadoPromedioAnual.SUPLETORIO) {
+    // NUEVA VALIDACIÓN: Verificar que el período esté en estado SUPLETORIOS
+    const periodo = await this.periodoLectivoRepository.findOne({
+      where: { id: promedioPeriodo.periodo_lectivo_id }
+    });
+
+    if (!periodo) {
+      throw new NotFoundException('Período lectivo no encontrado');
+    }
+
+    if (periodo.estado !== EstadoPeriodo.ACTIVO) {
       throw new BadRequestException(
-        'Solo se puede registrar supletorio para estudiantes en estado SUPLETORIO'
+        `El período está ${periodo.estado}. Solo se permite calificar en períodos ACTIVOS.`
+      );
+    }
+
+    if (periodo.estado_supletorio !== EstadoSupletorio.ACTIVADO) {
+      throw new BadRequestException(
+        `Los supletorios no están activos. Fase actual: ${periodo.estado_supletorio}. ` +
+        `Solo se permite calificar cuando la fase es ACTIVADO.`
       );
     }
 
     // Validar que el docente sea el asignado a la materia
     if (promedioPeriodo.materia_curso.docente_id !== docente_id) {
-      throw new BadRequestException(
-        'Solo el docente asignado a esta materia puede registrar la nota de supletorio'
-      );
-    }
-
-    // ✅ VALIDAR NOTA MÁXIMA 7.0
-    if (dto.nota_supletorio > 7.0) {
-      throw new BadRequestException(
-        'La nota máxima de supletorio es 7.00. No se permiten notas superiores.'
+      throw new ForbiddenException(
+        'Solo el docente asignado a esta materia puede registrar supletorios'
       );
     }
 
     // Registrar nota supletorio
     promedioPeriodo.nota_supletorio = dto.nota_supletorio;
 
-    // Calcular promedio final
-    const promedio_final = Number(
-      ((Number(promedioPeriodo.promedio_anual) + Number(dto.nota_supletorio)) / 2).toFixed(2)
-    );
-
-    promedioPeriodo.promedio_final = promedio_final;
-
-    // Recalcular cualitativa final
-    promedioPeriodo.cualitativa_final = calcularCalificacionCualitativa(promedio_final);
-
-    // Actualizar estado
-    if (promedio_final >= 7.0) {
+    if (dto.nota_supletorio === 7) {
+      // ✅ APROBÓ EL SUPLETORIO
+      promedioPeriodo.promedio_final = 7.0;
+      promedioPeriodo.cualitativa_final = ConversionCualitativa.AA;
       promedioPeriodo.estado = EstadoPromedioAnual.APROBADO;
     } else {
-      promedioPeriodo.estado = EstadoPromedioAnual.APROBADO;
-    }
-
-    // Actualizar observaciones si se proporcionan
-    if (dto.observaciones) {
-      promedioPeriodo.observaciones = dto.observaciones;
+      // ❌ NO APROBÓ EL SUPLETORIO (conserva promedio anual)
+      promedioPeriodo.promedio_final = promedioPeriodo.promedio_anual;
+      promedioPeriodo.cualitativa_final = promedioPeriodo.cualitativa_anual;
+      promedioPeriodo.estado = EstadoPromedioAnual.REPROBADO;
     }
 
     return await this.promedioPeriodoRepository.save(promedioPeriodo);
@@ -402,32 +397,36 @@ export class PromedioPeriodoService {
    * 🎓 DOCENTE + 👑 ADMIN: Estudiantes que necesitan rendir supletorio en una materia-curso
    */
   async estudiantesEnSupletorio(materia_curso_id: string, periodo_lectivo_id: string) {
-    return await this.promedioPeriodoRepository.find({
-      where: {
-        materia_curso_id,
-        periodo_lectivo_id,
-        estado: EstadoPromedioAnual.SUPLETORIO
-      },
-      order: {
-        estudiante: { nombres_completos: 'ASC' }
-      }
-    });
+    return await this.promedioPeriodoRepository
+      .createQueryBuilder('pp')
+      .leftJoinAndSelect('pp.estudiante', 'estudiante')
+      .leftJoinAndSelect('pp.materia_curso', 'materia_curso')
+      .leftJoinAndSelect('materia_curso.materia', 'materia')
+      .leftJoinAndSelect('pp.periodo_lectivo', 'periodo_lectivo')
+      .where('pp.materia_curso_id = :materia_curso_id', { materia_curso_id })
+      .andWhere('pp.periodo_lectivo_id = :periodo_lectivo_id', { periodo_lectivo_id })
+      .andWhere('pp.promedio_anual >= :min_promedio', { min_promedio: 5.0 })
+      .andWhere('pp.promedio_anual < :max_promedio', { max_promedio: 7.0 })
+      .orderBy('estudiante.nombres_completos', 'ASC')
+      .getMany();
   }
 
   /**
    * 🎓 TUTOR + 👑 ADMIN: Todos los estudiantes en supletorio de un período
    */
   async todosEstudiantesEnSupletorioPorPeriodo(periodo_lectivo_id: string) {
-    return await this.promedioPeriodoRepository.find({
-      where: {
-        periodo_lectivo_id,
-        estado: EstadoPromedioAnual.SUPLETORIO
-      },
-      order: {
-        estudiante: { nombres_completos: 'ASC' },
-        materia_curso: { materia: { nombre: 'ASC' } }
-      }
-    });
+    return await this.promedioPeriodoRepository
+      .createQueryBuilder('pp')
+      .leftJoinAndSelect('pp.estudiante', 'estudiante')
+      .leftJoinAndSelect('pp.materia_curso', 'materia_curso')
+      .leftJoinAndSelect('materia_curso.materia', 'materia')
+      .leftJoinAndSelect('pp.periodo_lectivo', 'periodo_lectivo')
+      .where('pp.periodo_lectivo_id = :periodo_lectivo_id', { periodo_lectivo_id })
+      .andWhere('pp.promedio_anual >= :min_promedio', { min_promedio: 5.0 })
+      .andWhere('pp.promedio_anual < :max_promedio', { max_promedio: 7.0 })
+      .orderBy('estudiante.nombres_completos', 'ASC')
+      .addOrderBy('materia.nombre', 'ASC')
+      .getMany();
   }
 
   /**
@@ -468,5 +467,39 @@ export class PromedioPeriodoService {
       periodo_lectivo_id,
       observaciones
     });
+  }
+
+  /**
+ * 👑 ADMIN: Limpiar datos de supletorio por período (cuando se regresa a PENDIENTE)
+ */
+  async limpiarDatosSupletorioPorPeriodo(periodo_lectivo_id: string) {
+    const promedios = await this.promedioPeriodoRepository.find({
+      where: {
+        periodo_lectivo_id,
+        estado: EstadoPromedioAnual.SUPLETORIO
+      }
+    });
+
+    if (promedios.length === 0) {
+      return {
+        actualizados: 0,
+        mensaje: 'No hay registros de supletorio para limpiar en este período'
+      };
+    }
+
+    // Limpiar datos de supletorio y restaurar estado
+    for (const promedio of promedios) {
+      promedio.nota_supletorio = null;
+      promedio.promedio_final = null;
+      promedio.cualitativa_final = null;
+      promedio.estado = EstadoPromedioAnual.SUPLETORIO; // Mantener en SUPLETORIO
+    }
+
+    await this.promedioPeriodoRepository.save(promedios);
+
+    return {
+      actualizados: promedios.length,
+      mensaje: `${promedios.length} registros de supletorio limpiados correctamente`
+    };
   }
 }

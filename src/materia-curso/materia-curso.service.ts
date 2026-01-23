@@ -1,5 +1,5 @@
 // nest-backend/src/materia-curso/materia-curso.service.ts
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateMateriaCursoDto } from './dto/create-materia-curso.dto';
 import { UpdateMateriaCursoDto } from './dto/update-materia-curso.dto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -12,7 +12,7 @@ import { DocentesService } from '../docentes/docentes.service';
 import { PeriodosLectivosService } from '../periodos-lectivos/periodos-lectivos.service';
 
 import { EstadoPeriodo } from '../periodos-lectivos/entities/periodos-lectivo.entity';
-import { EstadoMateria, NivelEducativo } from '../materias/entities/materia.entity';
+import { EstadoMateria, NivelEducativo, TipoCalificacion } from '../materias/entities/materia.entity';
 import { Estado } from '../usuarios/entities/usuario.entity';
 import { NivelCurso } from '../cursos/entities/curso.entity';
 import { NivelAsignado } from '../docentes/entities/docente.entity';
@@ -23,9 +23,10 @@ export class MateriaCursoService {
     @InjectRepository(MateriaCurso)
     private readonly materiaCursoRepository: Repository<MateriaCurso>,
     private readonly materiasService: MateriasService,
-    private readonly cursosService: CursosService,
     private readonly docentesService: DocentesService,
-    private readonly periodosLectivosService: PeriodosLectivosService
+    private readonly periodosLectivosService: PeriodosLectivosService,
+    @Inject(forwardRef(() => CursosService))
+    private readonly cursosService: CursosService
   ) { }
 
   async create(createMateriaCursoDto: CreateMateriaCursoDto) {
@@ -413,5 +414,86 @@ export class MateriaCursoService {
       message: `Materia "${materia.nombre}" eliminada de ${paraEliminar.length} paralelo(s)`,
       eliminados: paraEliminar.length,
     };
+  }
+
+
+  /**
+   * 🆕 AUTO-ASIGNAR COMPONENTES CUALITATIVOS AL TUTOR
+   * Se ejecuta automáticamente cuando se asigna un tutor a un curso
+   */
+  async asignarComponentesCualitativosTutor(
+    curso_id: string,
+    docente_id: string
+  ): Promise<void> {
+    const curso = await this.cursosService.findOne(curso_id);
+
+    // Determinar nivel educativo
+    const nivelesBasicos = [NivelCurso.OCTAVO, NivelCurso.NOVENO, NivelCurso.DECIMO];
+    const esBasica = nivelesBasicos.includes(curso.nivel);
+    const nivelEducativo = esBasica ? NivelEducativo.BASICA : NivelEducativo.BACHILLERATO;
+
+    // Obtener todas las materias cualitativas del nivel
+    const todasMaterias = await this.materiasService.findAll();
+    const componentesCualitativos = todasMaterias.filter(
+      m =>
+        m.tipoCalificacion === TipoCalificacion.CUALITATIVA && // ✅ Usar enum correcto
+        m.estado === EstadoMateria.ACTIVO &&
+        (m.nivelEducativo === nivelEducativo || m.nivelEducativo === NivelEducativo.GENERAL)
+    );
+
+    // Crear MateriaCurso para cada componente cualitativo
+    for (const materia of componentesCualitativos) {
+      // Verificar si ya existe
+      const existe = await this.materiaCursoRepository.findOne({
+        where: {
+          curso_id,
+          materia_id: materia.id,
+          periodo_lectivo_id: curso.periodo_lectivo_id,
+        },
+      });
+
+      if (!existe) {
+        // Crear nuevo registro con el tutor asignado
+        const materiaCurso = this.materiaCursoRepository.create({
+          curso_id,
+          materia_id: materia.id,
+          docente_id, // Asignar al tutor
+          periodo_lectivo_id: curso.periodo_lectivo_id,
+          estado: EstadoMateriaCurso.ACTIVO,
+        });
+
+        await this.materiaCursoRepository.save(materiaCurso);
+      } else if (!existe.docente_id) {
+        // Si existe pero no tiene docente, asignar al tutor
+        existe.docente_id = docente_id;
+        await this.materiaCursoRepository.save(existe);
+      }
+      // ⚠️ Si ya tiene un docente asignado, NO hacer nada (respeta calificaciones existentes)
+    }
+  }
+
+  /**
+   * 🆕 REASIGNAR COMPONENTES CUALITATIVOS AL NUEVO TUTOR
+   * ⚠️ NO ELIMINA CALIFICACIONES, solo cambia la asignación del docente
+   */
+  async reasignarComponentesCualitativosANuevoTutor(
+    curso_id: string,
+    nuevo_tutor_id: string
+  ): Promise<void> {
+    // Obtener todos los MateriaCurso cualitativos del curso
+    const materiaCursos = await this.materiaCursoRepository.find({
+      where: { curso_id },
+      relations: ['materia'],
+    });
+
+    const cualitativosDelCurso = materiaCursos.filter(
+      mc => mc.materia.tipoCalificacion === TipoCalificacion.CUALITATIVA
+    );
+
+    // ✅ Solo REASIGNAR al nuevo tutor (NO borrar, NO afecta calificaciones)
+    for (const mc of cualitativosDelCurso) {
+      mc.docente_id = nuevo_tutor_id;
+      await this.materiaCursoRepository.save(mc);
+    }
   }
 }

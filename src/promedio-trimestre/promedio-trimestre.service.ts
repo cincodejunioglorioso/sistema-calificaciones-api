@@ -14,8 +14,9 @@ import { Trimestre, TrimestreEstado } from '../trimestres/entities/trimestre.ent
 import { TipoEvaluacion, NombreTipoEvaluacion } from '../tipos-evaluacion/entities/tipos-evaluacion.entity';
 import { Insumo, EstadoInsumo } from '../insumos/entities/insumo.entity';
 import { ResultadoGeneracionMasiva, EstudianteIncompleto } from './dto/resultado-generacion-masiva.interface';
-import { calcularCalificacionCualitativa } from '../common/constants/escalas.constants';
+import { calcularConversionCualitativa } from '../common/constants/escalas.constants';
 import { EstadoEstudiante } from '../estudiantes/entities/estudiante.entity';
+import { TipoCalificacion } from '../materias/entities/materia.entity';
 
 @Injectable()
 export class PromedioTrimestreService {
@@ -38,7 +39,7 @@ export class PromedioTrimestreService {
     private readonly tipoEvaluacionRepository: Repository<TipoEvaluacion>,
     @InjectRepository(Insumo)
     private readonly insumoRepository: Repository<Insumo>,
-  ) {}
+  ) { }
 
   async create(createPromedioTrimestreDto: CreatePromedioTrimestreDto) {
     const { estudiante_id, materia_curso_id, trimestre_id } = createPromedioTrimestreDto;
@@ -93,7 +94,7 @@ export class PromedioTrimestreService {
     const porcentajeExamen = tiposEvaluacion.find(t => t.nombre === NombreTipoEvaluacion.EXAMEN)?.porcentaje || 15;
 
     const insumosData = await this.calcularPromedioInsumos(estudiante_id, materia_curso_id, trimestre_id);
-    
+
     if (!insumosData) {
       throw new BadRequestException('El estudiante no tiene insumos calificados en esta materia-trimestre');
     }
@@ -101,16 +102,18 @@ export class PromedioTrimestreService {
     const ponderado_insumos = Number((insumosData.promedio * (porcentajeInsumos / 100)).toFixed(2));
 
     const proyectoData = await this.obtenerNotaProyecto(estudiante_id, materiaCurso.curso_id, trimestre_id);
-    
-    if (!proyectoData) {
+
+    // ✅ FIX: Validar null/undefined, NO rechazar 0
+    if (proyectoData === null || proyectoData === undefined) {
       throw new BadRequestException('El estudiante no tiene calificación de proyecto integrador en este trimestre');
     }
 
     const ponderado_proyecto = Number((proyectoData * (porcentajeProyecto / 100)).toFixed(2));
 
     const examenData = await this.obtenerNotaExamen(estudiante_id, materia_curso_id, trimestre_id);
-    
-    if (!examenData) {
+
+    // ✅ FIX: Validar null/undefined, NO rechazar 0
+    if (examenData === null || examenData === undefined) {
       throw new BadRequestException('El estudiante no tiene calificación de examen en esta materia-trimestre');
     }
 
@@ -118,7 +121,7 @@ export class PromedioTrimestreService {
 
     const nota_final_trimestre = Number((ponderado_insumos + ponderado_proyecto + ponderado_examen).toFixed(2));
 
-    const cualitativa = calcularCalificacionCualitativa(nota_final_trimestre); 
+    const cualitativa = calcularConversionCualitativa(nota_final_trimestre);
 
     const promedio = this.promedioTrimestreRepository.create({
       estudiante_id,
@@ -198,13 +201,17 @@ export class PromedioTrimestreService {
     };
 
     const materiasCurso = await this.materiaCursoRepository.find({
-      where: { 
+      where: {
         curso: { periodo_lectivo_id: trimestre.periodo_lectivo_id }
       },
       relations: ['curso', 'materia']
     });
 
-    for (const materiaCurso of materiasCurso) {
+    const materiasCuantitativas = materiasCurso.filter(
+      mc => mc.materia.tipoCalificacion === TipoCalificacion.CUANTITATIVA
+    );
+
+    for (const materiaCurso of materiasCuantitativas) {
       const matriculas = await this.matriculaRepository.find({
         where: {
           curso_id: materiaCurso.curso_id,
@@ -270,7 +277,7 @@ export class PromedioTrimestreService {
 
     await this.promedioTrimestreRepository.remove(promedios);
 
-    return { 
+    return {
       eliminados: promedios.length,
       mensaje: `${promedios.length} promedios trimestrales eliminados. Se regenerarán al finalizar el trimestre nuevamente.`
     };

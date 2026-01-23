@@ -1,4 +1,5 @@
-import { CalificacionCualitativa } from '../../common/enums/cualitativa.enum';
+// nest-backend/src/reportes/interfaces/datos-reporte-materia.interface.ts
+import { ConversionCualitativa } from '../../common/enums/cualitativa.enum'; // 🔄 CAMBIO
 import { EspecialidadCurso, NivelCurso } from '../../cursos/entities/curso.entity';
 import { NombreTrimestre } from '../../trimestres/entities/trimestre.entity';
 
@@ -13,7 +14,7 @@ export interface CalificacionEstudianteMateria {
   nota_examen: number | null;
   ponderado_examen: number | null;
   nota_final: number;
-  cualitativa: CalificacionCualitativa;
+  cualitativa: ConversionCualitativa; // ✅ Para DA, AA, PA, NA
 }
 
 export interface EstadisticasMateria {

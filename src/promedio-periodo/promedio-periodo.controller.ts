@@ -9,9 +9,10 @@ import { GenerarPromediosPeriodoMasivoDto } from './dto/generar-promedios-masivo
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { DocenteGuard } from '../auth/guards/docente.guard';
+import { DocenteOrAdminGuard } from '../auth/guards/docente-or-admin.guard';
 
-@Controller('promedio-periodo')
 @UseGuards(JwtAuthGuard)
+@Controller('promedio-periodo')
 export class PromedioPeriodoController {
   constructor(private readonly promedioPeriodoService: PromedioPeriodoService) {}
 
@@ -38,8 +39,8 @@ export class PromedioPeriodoController {
    * 🎓 DOCENTE: Registrar nota de supletorio
    * Solo el docente de la materia puede registrar
    */
-  @Patch(':id/supletorio')
-  @UseGuards(DocenteGuard)
+  @Patch(':id/registrar-supletorio')
+  @UseGuards(DocenteOrAdminGuard)
   async registrarSupletorio(
     @Param('id') id: string,
     @Body() dto: RegistrarSupletorioDto,
@@ -61,7 +62,7 @@ export class PromedioPeriodoController {
    * 🎓 DOCENTE + 👑 ADMIN: Estudiantes en supletorio por materia-curso
    */
   @Get('supletorio/materia-curso/:materia_curso_id/periodo/:periodo_lectivo_id')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async estudiantesEnSupletorio(
     @Param('materia_curso_id') materia_curso_id: string,
     @Param('periodo_lectivo_id') periodo_lectivo_id: string
@@ -73,7 +74,7 @@ export class PromedioPeriodoController {
    * 🎓 TUTOR + 👑 ADMIN: Todos los estudiantes en supletorio de un período
    */
   @Get('supletorio/periodo/:periodo_lectivo_id')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async todosEstudiantesEnSupletorio(@Param('periodo_lectivo_id') periodo_lectivo_id: string) {
     return await this.promedioPeriodoService.todosEstudiantesEnSupletorioPorPeriodo(periodo_lectivo_id);
   }
@@ -82,7 +83,7 @@ export class PromedioPeriodoController {
    * 🎓 DOCENTE + 👑 ADMIN: Promedios anuales por materia-curso y período
    */
   @Get('materia-curso/:materia_curso_id/periodo/:periodo_lectivo_id')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async findByMateriaCursoYPeriodo(
     @Param('materia_curso_id') materia_curso_id: string,
     @Param('periodo_lectivo_id') periodo_lectivo_id: string
@@ -94,7 +95,7 @@ export class PromedioPeriodoController {
    * 🎓 DOCENTE + 👑 ADMIN: Promedios anuales por curso y período
    */
   @Get('curso/:curso_id/periodo/:periodo_lectivo_id')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async findByCursoYPeriodo(
     @Param('curso_id') curso_id: string,
     @Param('periodo_lectivo_id') periodo_lectivo_id: string
@@ -106,7 +107,7 @@ export class PromedioPeriodoController {
    * 🎓 DOCENTE + 👑 ADMIN: Histórico de promedios anuales de un estudiante
    */
   @Get('estudiante/:estudiante_id')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async findByEstudiante(@Param('estudiante_id') estudiante_id: string) {
     return await this.promedioPeriodoService.findByEstudiante(estudiante_id);
   }
@@ -115,7 +116,7 @@ export class PromedioPeriodoController {
    * 🎓 DOCENTE + 👑 ADMIN: Obtener promedio anual específico
    */
   @Get(':id')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async findOne(@Param('id') id: string) {
     return await this.promedioPeriodoService.findOne(id);
   }

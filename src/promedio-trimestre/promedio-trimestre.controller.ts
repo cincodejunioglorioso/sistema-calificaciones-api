@@ -8,9 +8,10 @@ import { GenerarPromediosMasivoDto } from './dto/generar-promedios-masivo.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { DocenteGuard } from '../auth/guards/docente.guard';
+import { DocenteOrAdminGuard } from '../auth/guards/docente-or-admin.guard';
 
-@Controller('promedio-trimestre')
 @UseGuards(JwtAuthGuard)
+@Controller('promedio-trimestre')
 export class PromedioTrimestreController {
   constructor(private readonly promedioTrimestreService: PromedioTrimestreService) {}
 
@@ -43,7 +44,7 @@ export class PromedioTrimestreController {
    * 🎓 DOCENTE + 👑 ADMIN: Listar promedios por materia-curso y trimestre
    */
   @Get('materia-curso/:materia_curso_id/trimestre/:trimestre_id')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async findByMateriaCursoYTrimestre(
     @Param('materia_curso_id') materia_curso_id: string,
     @Param('trimestre_id') trimestre_id: string
@@ -55,7 +56,7 @@ export class PromedioTrimestreController {
    * 🎓 DOCENTE + 👑 ADMIN: Listar promedios por curso y trimestre
    */
   @Get('curso/:curso_id/trimestre/:trimestre_id')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async findByCursoYTrimestre(
     @Param('curso_id') curso_id: string,
     @Param('trimestre_id') trimestre_id: string
@@ -67,7 +68,7 @@ export class PromedioTrimestreController {
    * 🎓 DOCENTE + 👑 ADMIN: Listar promedios de un estudiante (histórico)
    */
   @Get('estudiante/:estudiante_id')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async findByEstudiante(@Param('estudiante_id') estudiante_id: string) {
     return await this.promedioTrimestreService.findByEstudiante(estudiante_id);
   }
@@ -76,7 +77,7 @@ export class PromedioTrimestreController {
    * 🎓 DOCENTE + 👑 ADMIN: Obtener promedio específico
    */
   @Get(':id')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   async findOne(@Param('id') id: string) {
     return await this.promedioTrimestreService.findOne(id);
   }
