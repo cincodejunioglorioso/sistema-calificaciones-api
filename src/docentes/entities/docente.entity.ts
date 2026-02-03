@@ -1,9 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToOne, OneToMany, CreateDateColumn, UpdateDateColumn, JoinColumn } from 'typeorm';
 import { Usuario } from '../../usuarios/entities/usuario.entity';
-/* import { Curso } from '../../cursos/entities/curso.entity';
-import { MateriaCurso } from '../../materias-curso/entities/materias-curso.entity';
-import { CalificacionInsumo } from '../../calificaciones-insumo/entities/calificacion-insumo.entity';
- */
 
 export enum NivelAsignado {
     BASICA = 'BASICA',

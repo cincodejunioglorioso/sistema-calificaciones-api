@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TutorGuard } from '../auth/guards/tutor.guard';
 import { NivelEducativo } from '../materias/entities/materia.entity';
 import { DocenteGuard } from '../auth/guards/docente.guard';
+import { DocenteOrAdminGuard } from '../auth/guards/docente-or-admin.guard';
 
 @UseGuards(JwtAuthGuard)
 @Controller('calificacion-cualitativa')
@@ -51,7 +52,7 @@ export class CalificacionCualitativaController {
    * Obtener componentes según nivel educativo
    */
   @Get('componentes/:nivel')
-  @UseGuards(DocenteGuard)
+  @UseGuards(DocenteOrAdminGuard)
   obtenerComponentesPorNivel(@Param('nivel') nivel: NivelEducativo) {
     return this.calificacionService.obtenerComponentesPorNivel(nivel);
   }

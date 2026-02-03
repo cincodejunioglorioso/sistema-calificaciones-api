@@ -4,6 +4,7 @@ import { UpdateTipoEvaluacionDto } from './dto/update-tipos-evaluacion.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { NombreTipoEvaluacion, TipoEvaluacion } from './entities/tipos-evaluacion.entity';
 import { Repository } from 'typeorm';
+import { EstadoPeriodo } from '../periodos-lectivos/entities/periodos-lectivo.entity';
 
 @Injectable()
 export class TiposEvaluacionService {
@@ -106,6 +107,12 @@ export class TiposEvaluacionService {
 
   async update(id: string, updateTipoEvaluacionDto: UpdateTipoEvaluacionDto) {
     const tipo = await this.findOne(id);
+
+    if (tipo.periodo_lectivo_id === EstadoPeriodo.FINALIZADO) {
+      throw new BadRequestException(
+        'No se puede modificar el tipo de evaluación de un período finalizado'
+      );
+    }
 
     // Si se actualiza el porcentaje, validar suma
     if (updateTipoEvaluacionDto.porcentaje !== undefined) {

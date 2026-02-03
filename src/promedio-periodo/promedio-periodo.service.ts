@@ -126,10 +126,9 @@ export class PromedioPeriodoService {
       throw new BadRequestException('Faltan promedios trimestrales para calcular el promedio anual');
     }
 
-    // Calcular promedio anual
-    const promedio_anual = Number(
-      ((Number(t1.nota_final_trimestre) + Number(t2.nota_final_trimestre) + Number(t3.nota_final_trimestre)) / 3).toFixed(2)
-    );
+    const sumaTrimestres = Number(t1.nota_final_trimestre) + Number(t2.nota_final_trimestre) + Number(t3.nota_final_trimestre);
+
+    const promedio_anual = Math.round((sumaTrimestres / 3) * 100) / 100;
 
     // Calcular cualitativa anual
     const cualitativa_anual = calcularConversionCualitativa(promedio_anual);

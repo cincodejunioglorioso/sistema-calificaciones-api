@@ -16,115 +16,45 @@ export class EstudiantesService {
     private readonly dataSource: DataSource,
   ) { }
 
-  // ✅ Buscar estudiante por cédula o crear uno nuevo
-  async findOrCreate(cedula: string, createEstudianteDto: CreateEstudianteDto): Promise<Estudiante> {
-    let estudiante = await this.estudianteRepository.findOne({
-      where: { estudiante_cedula: cedula }
-    });
+  // ===================================
+  // 📊 ESTADÍSTICAS
+  // ===================================
+  async getEstadisticas() {
+    const [
+      activos,
+      sinMatricula,
+      graduados,
+      completos,
+      incompletos
+    ] = await Promise.all([
+      this.estudianteRepository.count({ where: { estado: EstadoEstudiante.ACTIVO } }),
+      this.estudianteRepository.count({ where: { estado: EstadoEstudiante.SIN_MATRICULA } }),
+      this.estudianteRepository.count({ where: { estado: EstadoEstudiante.GRADUADO } }),
+      this.estudianteRepository.count({ where: { datos_completos: true } }),
+      this.estudianteRepository.count({ where: { datos_completos: false } }),
+    ]);
 
-    if (!estudiante) {
-      estudiante = await this.create(createEstudianteDto);
-    }
-
-    return estudiante;
+    return {
+      activos,
+      sinMatricula,
+      graduados,
+      completos,
+      incompletos,
+    };
   }
 
-  // ✅ Crear estudiante (sin numero_de_matricula)
-  async create(createEstudianteDto: CreateEstudianteDto): Promise<Estudiante> {
-    const exists = await this.estudianteRepository.findOne({
-      where: { estudiante_cedula: createEstudianteDto.estudiante_cedula },
-    });
-
-    if (exists) {
-      throw new ConflictException('Estudiante con esta cédula ya existe');
-    }
-
-    const estudiante = this.estudianteRepository.create({
-      ...createEstudianteDto,
-      datos_completos: false,
-      estado: EstadoEstudiante.SIN_MATRICULA
-    });
-
-    return await this.estudianteRepository.save(estudiante);
-  }
-
+  // ===================================
+  // 🔍 BÚSQUEDA Y LISTADO
+  // ===================================
   async findAll(
     estado?: EstadoEstudiante,
     incompletos?: boolean,
     search?: string,
-    cursoId?: string,
     nivelCurso?: string,
-    periodoId?: string,
     page = 1,
     limit = 20
   ) {
-    const query = this.estudianteRepository.createQueryBuilder('estudiante');
-
-    // Cargar matrículas con sus relaciones
-    query.leftJoinAndSelect('estudiante.matriculas', 'matriculas');
-    query.leftJoinAndSelect('matriculas.curso', 'curso');
-    query.leftJoinAndSelect('matriculas.periodo_lectivo', 'periodo_lectivo');
-
-    if (estado) {
-      query.andWhere('estudiante.estado = :estado', { estado });
-    }
-
-    if (incompletos !== undefined && incompletos !== null) {
-      query.andWhere('estudiante.datos_completos = :datosCompletos', {
-        datosCompletos: !incompletos
-      });
-    }
-
-    if (search) {
-      query.andWhere(
-        `(estudiante.nombres_completos ILIKE :search OR
-        estudiante.estudiante_cedula ILIKE :search OR
-        estudiante.estudiante_email ILIKE :search)`,
-        { search: `%${search}%` }
-      );
-    }
-
-    if (cursoId) {
-      query.andWhere(
-        `EXISTS (
-        SELECT 1 
-        FROM matriculas m 
-        WHERE m.estudiante_id = estudiante.id 
-        AND m.curso_id = :cursoId 
-        AND m.estado = :estadoMatriculaActivo
-      )`
-      );
-      query.setParameter('cursoId', cursoId);
-      query.setParameter('estadoMatriculaActivo', EstadoMatricula.ACTIVO);
-    }
-
-    if (nivelCurso) {
-      query.andWhere(
-        `EXISTS (
-        SELECT 1 
-        FROM matriculas m 
-        INNER JOIN cursos c ON c.id = m.curso_id
-        WHERE m.estudiante_id = estudiante.id 
-        AND c.nivel = :nivelCurso 
-        AND m.estado = :estadoMatriculaActivo
-      )`
-      );
-      query.setParameter('nivelCurso', nivelCurso);
-      query.setParameter('estadoMatriculaActivo', EstadoMatricula.ACTIVO);
-    }
-
-    if (periodoId) {
-      query.andWhere(
-        `EXISTS (
-        SELECT 1 
-        FROM matriculas m 
-        WHERE m.estudiante_id = estudiante.id 
-        AND m.periodo_lectivo_id = :periodoId
-      )`
-      );
-      query.setParameter('periodoId', periodoId);
-    }
-
+    // ✅ Query principal para contar total
     const countQuery = this.estudianteRepository.createQueryBuilder('estudiante');
 
     if (estado) {
@@ -139,60 +69,41 @@ export class EstudiantesService {
 
     if (search) {
       countQuery.andWhere(
-        `(estudiante.nombres_completos ILIKE :search OR
-        estudiante.estudiante_cedula ILIKE :search OR
-        estudiante.estudiante_email ILIKE :search)`,
+        '(estudiante.nombres_completos ILIKE :search OR estudiante.estudiante_cedula ILIKE :search OR estudiante.estudiante_email ILIKE :search)',
         { search: `%${search}%` }
       );
-    }
-
-    if (cursoId) {
-      countQuery.andWhere(
-        `EXISTS (
-        SELECT 1 
-        FROM matriculas m 
-        WHERE m.estudiante_id = estudiante.id 
-        AND m.curso_id = :cursoId 
-        AND m.estado = :estadoMatriculaActivo
-      )`
-      );
-      countQuery.setParameter('cursoId', cursoId);
-      countQuery.setParameter('estadoMatriculaActivo', EstadoMatricula.ACTIVO);
     }
 
     if (nivelCurso) {
       countQuery.andWhere(
         `EXISTS (
-        SELECT 1 
-        FROM matriculas m 
-        INNER JOIN cursos c ON c.id = m.curso_id
-        WHERE m.estudiante_id = estudiante.id 
-        AND c.nivel = :nivelCurso 
-        AND m.estado = :estadoMatriculaActivo
-      )`
+          SELECT 1 
+          FROM matriculas m 
+          INNER JOIN cursos c ON c.id = m.curso_id
+          WHERE m.estudiante_id = estudiante.id 
+          AND c.nivel = :nivelCurso 
+          AND m.estado = :estadoMatriculaActivo
+        )`
       );
       countQuery.setParameter('nivelCurso', nivelCurso);
       countQuery.setParameter('estadoMatriculaActivo', EstadoMatricula.ACTIVO);
     }
 
-    if (periodoId) {
-      countQuery.andWhere(
-        `EXISTS (
-        SELECT 1 
-        FROM matriculas m 
-        WHERE m.estudiante_id = estudiante.id 
-        AND m.periodo_lectivo_id = :periodoId
-      )`
-      );
-      countQuery.setParameter('periodoId', periodoId);
-    }
-
     const total = await countQuery.getCount();
 
+    if (total === 0) {
+      return {
+        data: [],
+        total: 0,
+        page,
+        lastPage: 1,
+      };
+    }
+
+    // ✅ Subquery para obtener IDs paginados y ordenados
     const subQuery = this.estudianteRepository
       .createQueryBuilder('e')
-      .select('e.id')
-      .where('1=1');
+      .select('e.id');
 
     if (estado) {
       subQuery.andWhere('e.estado = :estado', { estado });
@@ -206,56 +117,30 @@ export class EstudiantesService {
 
     if (search) {
       subQuery.andWhere(
-        `(e.nombres_completos ILIKE :search OR
-        e.estudiante_cedula ILIKE :search OR
-        e.estudiante_email ILIKE :search)`,
+        '(e.nombres_completos ILIKE :search OR e.estudiante_cedula ILIKE :search OR e.estudiante_email ILIKE :search)',
         { search: `%${search}%` }
       );
-    }
-
-    if (cursoId) {
-      subQuery.andWhere(
-        `EXISTS (
-        SELECT 1 
-        FROM matriculas m 
-        WHERE m.estudiante_id = e.id 
-        AND m.curso_id = :cursoId 
-        AND m.estado = :estadoMatriculaActivo
-      )`
-      );
-      subQuery.setParameter('cursoId', cursoId);
-      subQuery.setParameter('estadoMatriculaActivo', EstadoMatricula.ACTIVO);
     }
 
     if (nivelCurso) {
       subQuery.andWhere(
         `EXISTS (
-        SELECT 1 
-        FROM matriculas m 
-        INNER JOIN cursos c ON c.id = m.curso_id
-        WHERE m.estudiante_id = e.id 
-        AND c.nivel = :nivelCurso 
-        AND m.estado = :estadoMatriculaActivo
-      )`
+          SELECT 1 
+          FROM matriculas m 
+          INNER JOIN cursos c ON c.id = m.curso_id
+          WHERE m.estudiante_id = e.id 
+          AND c.nivel = :nivelCurso 
+          AND m.estado = :estadoMatriculaActivo
+        )`
       );
       subQuery.setParameter('nivelCurso', nivelCurso);
       subQuery.setParameter('estadoMatriculaActivo', EstadoMatricula.ACTIVO);
     }
 
-    if (periodoId) {
-      subQuery.andWhere(
-        `EXISTS (
-        SELECT 1 
-        FROM matriculas m 
-        WHERE m.estudiante_id = e.id 
-        AND m.periodo_lectivo_id = :periodoId
-      )`
-      );
-      subQuery.setParameter('periodoId', periodoId);
-    }
-
-    subQuery.orderBy('e.nombres_completos', 'ASC');
-    subQuery.skip((page - 1) * limit).take(limit);
+    subQuery
+      .orderBy('e.nombres_completos', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit);
 
     const ids = await subQuery.getRawMany();
     const studentIds = ids.map(item => item.e_id);
@@ -269,14 +154,14 @@ export class EstudiantesService {
       };
     }
 
+    // ✅ Query final con relaciones completas manteniendo el orden
     const data = await this.estudianteRepository
       .createQueryBuilder('estudiante')
       .leftJoinAndSelect('estudiante.matriculas', 'matriculas')
       .leftJoinAndSelect('matriculas.curso', 'curso')
       .leftJoinAndSelect('matriculas.periodo_lectivo', 'periodo_lectivo')
-      .where('estudiante.id IN (:...ids)', { ids: studentIds })
-      .orderBy(`array_position(ARRAY[${studentIds.map((_, i) => `$${i + 1}`).join(',')}]::uuid[], estudiante.id)`)
-      .setParameters(studentIds)
+      .whereInIds(studentIds)
+      .orderBy('estudiante.nombres_completos', 'ASC')
       .getMany();
 
     return {
@@ -287,9 +172,8 @@ export class EstudiantesService {
     };
   }
 
-
   async findIncompletos(page = 1, limit = 20) {
-    return this.findAll(EstadoEstudiante.ACTIVO, true, undefined, undefined, undefined, undefined, +page, +limit);
+    return this.findAll(EstadoEstudiante.ACTIVO, true, undefined, undefined, page, limit);
   }
 
   async findOne(id: string): Promise<Estudiante> {
@@ -309,6 +193,51 @@ export class EstudiantesService {
     return await this.estudianteRepository.findOne({
       where: { estudiante_cedula: cedula }
     });
+  }
+
+  // ===================================
+  // ✏️ CREAR Y ACTUALIZAR
+  // ===================================
+  async findOrCreate(cedula: string, createEstudianteDto: CreateEstudianteDto): Promise<Estudiante> {
+    let estudiante = await this.estudianteRepository.findOne({
+      where: { estudiante_cedula: cedula }
+    });
+
+    if (!estudiante) {
+      estudiante = await this.create(createEstudianteDto);
+    } else {
+      if (createEstudianteDto.nombres_completos && createEstudianteDto.nombres_completos !== estudiante.nombres_completos) {
+        estudiante.nombres_completos = createEstudianteDto.nombres_completos;
+      }
+
+    // Actualizar email si cambió (permitir null/undefined para limpiar)
+    if (createEstudianteDto.estudiante_email !== undefined) {
+      estudiante.estudiante_email = createEstudianteDto.estudiante_email || undefined;
+    }
+
+    // Guardar cambios si hubo modificaciones
+    estudiante = await this.estudianteRepository.save(estudiante);
+  }
+
+    return estudiante;
+  }
+
+  async create(createEstudianteDto: CreateEstudianteDto): Promise<Estudiante> {
+    const exists = await this.estudianteRepository.findOne({
+      where: { estudiante_cedula: createEstudianteDto.estudiante_cedula },
+    });
+
+    if (exists) {
+      throw new ConflictException('Estudiante con esta cédula ya existe');
+    }
+
+    const estudiante = this.estudianteRepository.create({
+      ...createEstudianteDto,
+      datos_completos: false,
+      estado: EstadoEstudiante.SIN_MATRICULA
+    });
+
+    return await this.estudianteRepository.save(estudiante);
   }
 
   async update(id: string, updateEstudianteDto: UpdateEstudianteDto): Promise<Estudiante> {
@@ -339,12 +268,15 @@ export class EstudiantesService {
   ): Promise<Estudiante> {
     const estudiante = await this.findOne(id);
 
-    // Actualizar solo campos permitidos (sin nombres, cédula, correo,  ni estado)
+    // Actualizar solo campos permitidos (sin nombres, cédula, correo, ni estado)
     Object.assign(estudiante, updateDatosPersonalesDto);
 
     return await this.estudianteRepository.save(estudiante);
   }
 
+  // ===================================
+  // 🎯 ACCIONES DE ESTADO
+  // ===================================
   async retirar(id: string, motivo?: string) {
     const estudiante = await this.findOne(id);
 
@@ -356,7 +288,7 @@ export class EstudiantesService {
       throw new BadRequestException('No se puede retirar un estudiante graduado');
     }
 
-    const queryRunner = this.estudianteRepository.manager.connection.createQueryRunner();
+    const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
@@ -382,7 +314,7 @@ export class EstudiantesService {
 
       return {
         message: `Estudiante ${estudiante.nombres_completos} retirado exitosamente`,
-        estudiante
+        estudiante: await this.findOne(id)
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -408,19 +340,15 @@ export class EstudiantesService {
 
     return {
       message: `¡Felicitaciones! ${estudiante.nombres_completos} se ha graduado`,
-      estudiante
+      estudiante: await this.findOne(id)
     };
   }
 
   async reactivar(id: string) {
     const estudiante = await this.findOne(id);
 
-    if (!estudiante) {
-      throw new NotFoundException(`Estudiante con ID ${id} no encontrado`);
-    }
-
     if (estudiante.estado !== EstadoEstudiante.RETIRADO) {
-      throw new BadRequestException('El estudiante no esta retirado');
+      throw new BadRequestException('El estudiante no está retirado');
     }
 
     await this.estudianteRepository.update(id, {

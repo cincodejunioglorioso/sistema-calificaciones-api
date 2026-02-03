@@ -72,7 +72,7 @@ export interface DatosLibretaEstudiante {
 
   trimestres: CalificacionesTrimestreLibreta[];
   promedios_anuales: PromedioAnualMateria[] | null;
-
+  promedio_general_trimestres: number | null;
   promedio_general_anual: number | null;
   cualitativa_general_anual: ConversionCualitativa | null; // ✅ Para DA, AA, PA, NA
   componentes_cualitativos: ComponentesCualitativosLibreta;

@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { CursosService } from "../../cursos/cursos.service";
 import { Matricula } from "../../matriculas/entities/matricula.entity";
 import { EstadoMatricula } from "../../matriculas/entities/matricula.entity";
+import { Role } from "../../usuarios/entities/usuario.entity";
 
 @Injectable()
 export class TutorGuard implements CanActivate {
@@ -17,6 +18,12 @@ export class TutorGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
+    // ✅ ADMIN tiene acceso total
+    if (user.rol === Role.ADMIN) {
+      return true;
+    }
+
+    // ✅ Validar que sea DOCENTE con docente_id
     if (!user.docente_id) {
       throw new ForbiddenException('El usuario no es un docente');
     }

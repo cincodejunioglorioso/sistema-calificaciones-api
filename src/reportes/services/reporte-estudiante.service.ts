@@ -1,4 +1,3 @@
-// nest-backend/src/reportes/services/reporte-estudiante.service.ts
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -58,7 +57,7 @@ export class ReporteEstudianteService {
     // 2. Obtener trimestre solicitado
     const trimestreActual = await this.trimestresService.findOne(trimestre_id);
 
-    // 3. Obtener matrícula activa del estudiante en este período
+    // 3. Obtener matrícula activa
     const matricula = await this.matriculaRepository.findOne({
       where: {
         estudiante_id: estudiante_id,
@@ -69,9 +68,7 @@ export class ReporteEstudianteService {
     });
 
     if (!matricula) {
-      throw new NotFoundException(
-        `No se encontró matrícula activa para el estudiante en este período`
-      );
+      throw new NotFoundException(`No se encontró matrícula activa`);
     }
 
     // 4. Verificar permisos
@@ -79,25 +76,20 @@ export class ReporteEstudianteService {
       await this.verificarPermisoTutor(docente_id, matricula.curso_id);
     }
 
-    // 5. Obtener todos los trimestres del período
+    // 5 y 6. Trimestres a mostrar
     const todosLosTrimestres = await this.trimestresService.findTrimestresByPeriodo(
       trimestreActual.periodo_lectivo_id
     );
-
-    // 6. Determinar qué trimestres mostrar
     const numeroTrimestreActual = this.getNumeroTrimestre(trimestreActual.nombre);
     const trimestresAMostrar = todosLosTrimestres
       .filter(t => this.getNumeroTrimestre(t.nombre) <= numeroTrimestreActual)
       .sort((a, b) => this.getNumeroTrimestre(a.nombre) - this.getNumeroTrimestre(b.nombre));
 
-    // 7. Obtener calificaciones de cada trimestre
+    // 7. Calificaciones por trimestre
     const trimestresConCalificaciones: CalificacionesTrimestreLibreta[] = await Promise.all(
       trimestresAMostrar.map(async (trimestre) => {
         const calificacionesTrimestre = await this.promedioTrimestreRepository.find({
-          where: {
-            estudiante_id: estudiante_id,
-            trimestre_id: trimestre.id
-          },
+          where: { estudiante_id, trimestre_id: trimestre.id },
           relations: ['materia_curso', 'materia_curso.materia']
         });
 
@@ -117,40 +109,24 @@ export class ReporteEstudianteService {
           ? materias.reduce((sum, m) => sum + m.nota_final, 0) / materias.length
           : null;
 
-        const cualitativa_general = promedio_general
-          ? calcularConversionCualitativa(promedio_general)
-          : null;
-
         return {
           trimestre_numero: this.getNumeroTrimestre(trimestre.nombre),
           trimestre_nombre: trimestre.nombre,
           trimestre_estado: trimestre.estado,
           materias,
           promedio_general: promedio_general ? Math.round(promedio_general * 100) / 100 : null,
-          cualitativa_general,
+          cualitativa_general: promedio_general ? calcularConversionCualitativa(promedio_general) : null,
         };
       })
     );
 
-    // 8. Obtener promedios anuales SOLO si los 3 trimestres están completos
+    // 8. Inicializar variables de fin de año
     let promedios_anuales: PromedioAnualMateria[] | null = null;
-    let promedio_general_anual: number | null = null;
+    let promedio_general_trimestres: number | null = null; // Para la columna "3 Trimestres"
+    let promedio_general_anual: number | null = null;     // Para la columna "Final Anual"
     let cualitativa_general_anual: ConversionCualitativa | null = null;
 
-    if (trimestresConCalificaciones.length === 3) {
-      promedios_anuales = await this.obtenerPromediosAnuales(
-        estudiante_id,
-        trimestreActual.periodo_lectivo_id
-      );
-
-      if (promedios_anuales && promedios_anuales.length > 0) {
-        promedio_general_anual = promedios_anuales.reduce((sum, m) => sum + m.promedio_anual, 0) / promedios_anuales.length;
-        promedio_general_anual = Math.round(promedio_general_anual * 100) / 100;
-        cualitativa_general_anual = calcularConversionCualitativa(promedio_general_anual);
-      }
-    }
-
-    // 🆕 9. Obtener componentes cualitativos reales
+    // 9. Componentes cualitativos
     const componentes_cualitativos = await this.obtenerComponentesCualitativos(
       estudiante_id,
       matricula.curso_id,
@@ -158,7 +134,30 @@ export class ReporteEstudianteService {
       matricula.curso.nivel
     );
 
-    // 10. Construir respuesta
+    // 10. Lógica de promedios anuales (Solo si están los 3 trimestres)
+    if (trimestresConCalificaciones.length === 3) {
+      promedios_anuales = await this.obtenerPromediosAnuales(
+        estudiante_id,
+        trimestreActual.periodo_lectivo_id
+      );
+
+      if (promedios_anuales && promedios_anuales.length > 0) {
+        // --- CÁLCULO 1: Promedio de los 3 trimestres (SIN supletorio) ---
+        const sumaTrimestres = promedios_anuales.reduce((sum, m) => sum + m.promedio_anual, 0);
+        promedio_general_trimestres = Math.round((sumaTrimestres / promedios_anuales.length) * 100) / 100;
+
+        // --- CÁLCULO 2: Promedio Final Anual (CON supletorio aplicado) ---
+        const sumaFinalDefinitiva = promedios_anuales.reduce((sum, m) => {
+          const notaDefinitiva = m.promedio_final !== null ? m.promedio_final : m.promedio_anual;
+          return sum + notaDefinitiva;
+        }, 0);
+
+        promedio_general_anual = Math.round((sumaFinalDefinitiva / promedios_anuales.length) * 100) / 100;
+        cualitativa_general_anual = calcularConversionCualitativa(promedio_general_anual);
+      }
+    }
+
+    // 11. Retorno con todos los campos requeridos por la Interface
     return {
       estudiante: {
         id: estudiante.id,
@@ -177,9 +176,10 @@ export class ReporteEstudianteService {
       },
       trimestres: trimestresConCalificaciones,
       promedios_anuales,
+      promedio_general_trimestres, // <--- Esto soluciona el error TS
       promedio_general_anual,
       cualitativa_general_anual,
-      componentes_cualitativos, // 🆕
+      componentes_cualitativos,
     };
   }
 
@@ -277,12 +277,12 @@ export class ReporteEstudianteService {
     }
 
     return promedios.map(p => {
-      // ✅ LÓGICA DE SUPLETORIO: Si aprobó con supletorio (>= 7), mostrar 7.00
-      let nota_para_libreta = p.promedio_anual;
+      let valorFinalCalculado = p.promedio_final ? Number(p.promedio_final) : null;
 
-      if (p.nota_supletorio !== null && p.promedio_final !== null) {
-        // Tiene supletorio registrado
-        nota_para_libreta = p.promedio_final >= 7.0 ? 7.0 : p.promedio_final;
+      if (p.nota_supletorio !== null && valorFinalCalculado !== null) {
+        if (valorFinalCalculado >= 7.0) {
+          valorFinalCalculado = 7.0;
+        }
       }
 
       return {
@@ -291,7 +291,7 @@ export class ReporteEstudianteService {
         cualitativa: p.cualitativa_anual,
         // 🆕 CAMPOS DE SUPLETORIO
         nota_supletorio: p.nota_supletorio ? Number(p.nota_supletorio) : null,
-        promedio_final: p.promedio_final ? Number(p.promedio_final) : null,
+        promedio_final: valorFinalCalculado,
         cualitativa_final: p.cualitativa_final || null,
       };
     });
@@ -368,6 +368,7 @@ export class ReporteEstudianteService {
     let promedios_anuales: PromedioAnualMateria[] | null = null;
     let promedio_general_anual: number | null = null;
     let cualitativa_general_anual: ConversionCualitativa | null = null;
+    let promedio_general_trimestres: number | null = null;
 
     if (trimestresConCalificaciones.length === 3) {
       promedios_anuales = await this.obtenerPromediosAnuales(
@@ -376,11 +377,23 @@ export class ReporteEstudianteService {
       );
 
       if (promedios_anuales && promedios_anuales.length > 0) {
-        promedio_general_anual = promedios_anuales.reduce((sum, m) => sum + m.promedio_anual, 0) / promedios_anuales.length;
-        promedio_general_anual = Math.round(promedio_general_anual * 100) / 100;
+        // 1. Cálculo del Promedio de los 3 Trimestres (Columna: PROMEDIO FINAL 3 TRIM)
+        const sumaTrimestres = promedios_anuales.reduce((sum, m) => sum + m.promedio_anual, 0);
+        promedio_general_trimestres = Math.round((sumaTrimestres / promedios_anuales.length) * 100) / 100;
+
+        // 2. Cálculo del Promedio Final Anual (Columna: PROMEDIO FINAL ANUAL)
+        const sumaParaPromedioGlobal = promedios_anuales.reduce((sum, m) => {
+          // Usamos promedio_final (post-supletorio) si existe, sino el anual normal
+          const notaMateria = m.promedio_final !== null ? m.promedio_final : m.promedio_anual;
+          return sum + notaMateria;
+        }, 0);
+
+        const resultadoFinal = sumaParaPromedioGlobal / promedios_anuales.length;
+        promedio_general_anual = Math.round(resultadoFinal * 100) / 100;
         cualitativa_general_anual = calcularConversionCualitativa(promedio_general_anual);
       }
     }
+
 
     // 🆕 5. Obtener componentes cualitativos
     const componentes_cualitativos = await this.obtenerComponentesCualitativos(
@@ -409,6 +422,7 @@ export class ReporteEstudianteService {
       },
       trimestres: trimestresConCalificaciones,
       promedios_anuales,
+      promedio_general_trimestres,
       promedio_general_anual,
       cualitativa_general_anual,
       componentes_cualitativos, // 🆕

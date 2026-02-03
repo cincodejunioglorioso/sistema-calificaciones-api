@@ -25,7 +25,7 @@ export class RecuperacionInsumo {
     @UpdateDateColumn()
     updatedAt: Date;
 
-    @ManyToOne(() => CalificacionInsumo, { eager: true })
+    @ManyToOne(() => CalificacionInsumo, { eager: true, onDelete: 'CASCADE' })
     @JoinColumn({ name: 'calificacion_insumo_id' })
     calificacion_insumo: CalificacionInsumo;
 }

@@ -100,13 +100,12 @@ export class ReporteInsumosService {
         const calificacionesOrdenadas: CalificacionInsumoReporte[] = insumosOrden.map(insumoNombre => {
           return {
             insumo_nombre: insumoNombre,
-            nota: calificacionesMap.get(insumoNombre) || null
-          };
+            nota: calificacionesMap.has(insumoNombre) ? calificacionesMap.get(insumoNombre)! : null };
         });
         
         // Calcular promedio de insumos (solo notas válidas)
         const notasValidas = calificacionesOrdenadas
-          .filter(c => c.nota !== null && c.nota > 0)
+          .filter(c => c.nota !== null )
           .map(c => c.nota!);
         
         const promedio_insumos = notasValidas.length > 0

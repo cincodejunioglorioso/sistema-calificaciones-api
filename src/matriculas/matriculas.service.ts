@@ -30,6 +30,8 @@ export class MatriculasService {
     @Inject(CACHE_MANAGER) private cacheManager: Cache
   ) { }
 
+  // ✅ matriculas.service.ts - create() MEJORADO
+
   async create(createMatriculaDto: CreateMatriculaDto) {
     // 1️⃣ VALIDAR QUE EL CURSO EXISTA
     const curso = await this.cursosService.findOne(createMatriculaDto.curso_id);
@@ -51,11 +53,11 @@ export class MatriculasService {
       );
     }
 
-    // 3️⃣ BUSCAR O CREAR ESTUDIANTE
+    // 3️⃣ BUSCAR O CREAR ESTUDIANTE (ahora actualiza email y nombre si cambiaron)
     const createEstudianteDto: CreateEstudianteDto = {
       estudiante_cedula: createMatriculaDto.estudiante_cedula,
       nombres_completos: createMatriculaDto.nombres_completos,
-      estudiante_email: createMatriculaDto.estudiante_email,
+      estudiante_email: createMatriculaDto.estudiante_email || undefined, // ✅ Permitir vacío
     };
 
     const estudiante = await this.estudiantesService.findOrCreate(
@@ -94,16 +96,18 @@ export class MatriculasService {
 
     const matriculaGuardada = await this.matriculaRepository.save(matricula);
 
-    if (estudiante.estado === EstadoEstudiante.SIN_MATRICULA) {
+    // 7️⃣ ACTUALIZAR ESTADO DEL ESTUDIANTE SI ESTABA SIN MATRÍCULA O RETIRADO
+    if (estudiante.estado === EstadoEstudiante.SIN_MATRICULA ||
+      estudiante.estado === EstadoEstudiante.RETIRADO) {
       await this.estudiantesService.update(estudiante.id, {
         estado: EstadoEstudiante.ACTIVO
       });
     }
 
-    // 7️⃣ ACTUALIZAR CONTADOR DE ESTUDIANTES EN EL CURSO
+    // 8️⃣ ACTUALIZAR CONTADOR DE ESTUDIANTES EN EL CURSO
     await this.actualizarContadorCurso(curso.id);
 
-    // 8️⃣ RETORNAR CON RELACIONES COMPLETAS
+    // 9️⃣ RETORNAR CON RELACIONES COMPLETAS
     return await this.findOne(matriculaGuardada.id);
   }
 
@@ -117,6 +121,22 @@ export class MatriculasService {
 
     // 2️⃣ Obtener todos los cursos disponibles
     const cursosDisponibles = await this.cursosService.findAll();
+
+    const estudiantesMatriculados = await this.matriculaRepository.find({
+      where: {
+        periodo_lectivo_id: periodoId,
+        estado: EstadoMatricula.ACTIVO
+      },
+      relations: ['estudiante', 'curso']
+    });
+
+    // Crear mapa de cédulas ya matriculadas
+    const matriculasMap = new Map(
+      estudiantesMatriculados.map(m => [
+        m.estudiante.estudiante_cedula,
+        m
+      ])
+    );
 
     const registros: RegistroImportacionDto[] = [];
     let filaGlobal = 0;
@@ -151,12 +171,23 @@ export class MatriculasService {
 
         // 5️⃣ VALIDAR REGISTRO
         const errores: string[] = [];
+        let ya_matriculado = false;
 
         if (!cedula) errores.push('Cédula faltante');
         if (!nombres || nombres.length < 3) errores.push('Nombres completos inválidos');
         if (correo && !correo.includes('@')) errores.push('Correo electrónico inválido');
         if (!año || !paralelo || !especialidad) {
           errores.push('Datos del curso incompletos');
+        }
+
+        if (cedula && matriculasMap.has(cedula)) {
+          const matriculaExistente = matriculasMap.get(cedula);
+          if (matriculaExistente) {
+            ya_matriculado = true;
+            errores.push(
+              `Ya tiene matrícula activa en ${matriculaExistente.curso.nivel} ${matriculaExistente.curso.paralelo}`
+            );
+          }
         }
 
         // 6️⃣ PARSEAR CURSO
@@ -167,6 +198,7 @@ export class MatriculasService {
         if (!cursoParsed) {
           errores.push('No se pudo interpretar el curso');
         }
+
 
         // 7️⃣ BUSCAR CURSO EN BD
         let cursoId: string | undefined = undefined;
@@ -199,8 +231,9 @@ export class MatriculasService {
             ? `${cursoParsed.nivel} ${cursoParsed.paralelo} - ${cursoParsed.especialidad}`
             : undefined,
           curso_id: cursoId,
-          valido: errores.length === 0,
-          errores
+          valido: errores.length === 0 && !ya_matriculado,
+          errores,
+          ya_matriculado: ya_matriculado
         });
       }
     }
@@ -208,12 +241,14 @@ export class MatriculasService {
     const previewId = `preview_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     await this.cacheManager.set(previewId, registros, 600000);
 
+    const existentes = registros.filter(r => r.ya_matriculado).length;
 
     return {
       preview_id: previewId,
       total_registros: registros.length,
       validos: registros.filter(r => r.valido).length,
       invalidos: registros.filter(r => !r.valido).length,
+      existentes,
       registros
     };
   }
@@ -380,7 +415,7 @@ export class MatriculasService {
     });
 
     return matriculas;
-  }  
+  }
 
   async update(id: string, updateMatriculaDto: UpdateMatriculaDto) {
     // ✅ USAR TRANSACCIÓN PARA GARANTIZAR CONSISTENCIA

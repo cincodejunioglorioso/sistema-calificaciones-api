@@ -370,7 +370,6 @@ export class PdfGeneratorService {
         // Resetear color
         doc.fillColor('#000');
     }
-
     private dibujarTablaTrimestreCompacta(doc: PDFKit.PDFDocument, datos: DatosLibretaEstudiante) {
         const pageWidth = doc.page.width;
         const marginLeft = 30;
@@ -402,39 +401,30 @@ export class PdfGeneratorService {
         // ============ DEFINIR ANCHOS DE COLUMNAS ============
         const colWidths = {
             asignatura: 90,
-            trimestreCompleto: 180,  // Reducido para dar espacio a columnas de supletorio
-            // 🆕 COLUMNAS DE SUPLETORIO (total ~145)
+            trimestreCompleto: 180,
             promedioFinal3Trim: 35,
             califSupletorio: 35,
             promedioFinalAnual: 35,
             equivalencia: 40
         };
 
-        // Sub-columnas dentro de cada trimestre (DEBEN SUMAR ~180)
         const subColWidths = {
             aporte: 50,
             sumativa: 100,
             notaTrimestre: 30
         };
 
-        // Micro-columnas
         const microWidths = {
-            // APORTE (50 total)
             promedio: 25,
             ponderado70: 25,
-
-            // SUMATIVA (100 total)
             proyectoIntegrador: 25,
             ponderado15_1: 25,
             pruebaEstructurada: 25,
             ponderado15_2: 25,
-
-            // NOTA TRIMESTRE (30 total)
             notaTotal: 15,
             equivalencia: 15
         };
 
-        // 🆕 Ancho total de la sección "NOTA PONDERADA FINAL"
         const notaPonderadaFinalWidth =
             colWidths.promedioFinal3Trim +
             colWidths.califSupletorio +
@@ -451,483 +441,205 @@ export class PdfGeneratorService {
         const headerLevel3Height = 50;
         const headerHeight = 12 + headerLevel2Height + headerLevel3Height;
 
-        // ============ DIBUJAR RECTÁNGULO DE "ASIGNATURA" (COMBINA 3 FILAS) ============
-        doc
-            .rect(startX, currentY, colWidths.asignatura, headerHeight)
-            .lineWidth(1)
-            .stroke('#000');
-
-        doc
-            .fontSize(7)
-            .font('Helvetica-Bold')
+        // ============ DIBUJAR CABECERAS ============
+        doc.rect(startX, currentY, colWidths.asignatura, headerHeight).stroke('#000');
+        doc.fontSize(7).font('Helvetica-Bold')
             .text('Asignatura', startX + 2, currentY + (headerHeight / 2) - 3, {
                 width: colWidths.asignatura - 4,
                 align: 'center'
             });
 
-        // ============ NIVEL 1: TRIMESTRES + NOTA PONDERADA FINAL ============
         let xPos = startX + colWidths.asignatura;
+        const trimestresNombres = ['PRIMER TRIMESTRE', 'SEGUNDO TRIMESTRE', 'TERCER TRIMESTRE'];
 
-        // Primer Trimestre
-        doc
-            .rect(xPos, currentY, colWidths.trimestreCompleto, 12)
-            .stroke('#000');
-        doc
-            .fontSize(6)
-            .font('Helvetica-Bold')
-            .text('PRIMER TRIMESTRE', xPos, currentY + 3, {
-                width: colWidths.trimestreCompleto,
-                align: 'center'
-            });
-        xPos += colWidths.trimestreCompleto;
-
-        // Segundo Trimestre
-        doc
-            .rect(xPos, currentY, colWidths.trimestreCompleto, 12)
-            .stroke('#000');
-        doc.text('SEGUNDO TRIMESTRE', xPos, currentY + 3, {
-            width: colWidths.trimestreCompleto,
-            align: 'center'
+        trimestresNombres.forEach(nombre => {
+            doc.rect(xPos, currentY, colWidths.trimestreCompleto, 12).stroke('#000');
+            doc.fontSize(6).text(nombre, xPos, currentY + 3, { width: colWidths.trimestreCompleto, align: 'center' });
+            xPos += colWidths.trimestreCompleto;
         });
-        xPos += colWidths.trimestreCompleto;
 
-        // Tercer Trimestre
-        doc
-            .rect(xPos, currentY, colWidths.trimestreCompleto, 12)
-            .stroke('#000');
-        doc.text('TERCER TRIMESTRE', xPos, currentY + 3, {
-            width: colWidths.trimestreCompleto,
-            align: 'center'
-        });
-        xPos += colWidths.trimestreCompleto;
-
-        doc
-            .rect(xPos, currentY, notaPonderadaFinalWidth, 12)
-            .stroke('#000');
-        doc
-            .fontSize(6)
-            .font('Helvetica-Bold')
-            .text('NOTA PONDERADA FINAL', xPos, currentY + 3, {
-                width: notaPonderadaFinalWidth,
-                align: 'center'
-            });
+        doc.rect(xPos, currentY, notaPonderadaFinalWidth, 12).stroke('#000');
+        doc.text('NOTA PONDERADA FINAL', xPos, currentY + 3, { width: notaPonderadaFinalWidth, align: 'center' });
 
         currentY += 12;
-        // ============ NIVEL 2: APORTE | SUMATIVA | Nota Trimestre (x3) ============
         xPos = startX + colWidths.asignatura;
 
         for (let i = 0; i < 3; i++) {
-            // APORTE
-            doc
-                .rect(xPos, currentY, subColWidths.aporte, headerLevel2Height)
-                .stroke('#000');
-            doc
-                .fontSize(5)
-                .font('Helvetica-Bold')
-                .text('APORTE', xPos, currentY + 2, {
-                    width: subColWidths.aporte,
-                    align: 'center'
-                });
+            doc.rect(xPos, currentY, subColWidths.aporte, headerLevel2Height).stroke('#000');
+            doc.fontSize(5).text('APORTE', xPos, currentY + 2, { width: subColWidths.aporte, align: 'center' });
             xPos += subColWidths.aporte;
 
-            // SUMATIVA
-            doc
-                .rect(xPos, currentY, subColWidths.sumativa, headerLevel2Height)
-                .stroke('#000');
-            doc.text('SUMATIVA', xPos, currentY + 2, {
-                width: subColWidths.sumativa,
-                align: 'center'
-            });
+            doc.rect(xPos, currentY, subColWidths.sumativa, headerLevel2Height).stroke('#000');
+            doc.text('SUMATIVA', xPos, currentY + 2, { width: subColWidths.sumativa, align: 'center' });
             xPos += subColWidths.sumativa;
 
-            // Nota Trimestre
-            doc
-                .rect(xPos, currentY, subColWidths.notaTrimestre, headerLevel2Height)
-                .stroke('#000');
-            doc.text('Nota Trim.', xPos, currentY + 2, {
-                width: subColWidths.notaTrimestre,
-                align: 'center'
-            });
+            doc.rect(xPos, currentY, subColWidths.notaTrimestre, headerLevel2Height).stroke('#000');
+            doc.text('Nota Trim.', xPos, currentY + 2, { width: subColWidths.notaTrimestre, align: 'center' });
             xPos += subColWidths.notaTrimestre;
         }
 
-        // 🆕 NIVEL 2+3: Columnas de NOTA PONDERADA FINAL (combinan nivel 2 y 3, con texto rotado)
         const nivel2y3Height = headerLevel2Height + headerLevel3Height;
-
-        // Promedio Final (3 Trimestres)
-        doc
-            .rect(xPos, currentY, colWidths.promedioFinal3Trim, nivel2y3Height)
-            .stroke('#000');
         this.dibujarTextoRotado(doc, 'PROMEDIO FINAL (3 TRIM)', xPos, currentY, colWidths.promedioFinal3Trim, nivel2y3Height);
+        doc.rect(xPos, currentY, colWidths.promedioFinal3Trim, nivel2y3Height).stroke('#000');
         xPos += colWidths.promedioFinal3Trim;
 
-        // Calificación Examen Supletorio
-        doc
-            .rect(xPos, currentY, colWidths.califSupletorio, nivel2y3Height)
-            .stroke('#000');
         this.dibujarTextoRotado(doc, 'CALIF. EXAMEN SUPLETORIO', xPos, currentY, colWidths.califSupletorio, nivel2y3Height);
+        doc.rect(xPos, currentY, colWidths.califSupletorio, nivel2y3Height).stroke('#000');
         xPos += colWidths.califSupletorio;
 
-        // Promedio Final Anual
-        doc
-            .rect(xPos, currentY, colWidths.promedioFinalAnual, nivel2y3Height)
-            .stroke('#000');
         this.dibujarTextoRotado(doc, 'PROMEDIO FINAL ANUAL', xPos, currentY, colWidths.promedioFinalAnual, nivel2y3Height);
+        doc.rect(xPos, currentY, colWidths.promedioFinalAnual, nivel2y3Height).stroke('#000');
         xPos += colWidths.promedioFinalAnual;
 
-        // Equivalencia
-        doc
-            .rect(xPos, currentY, colWidths.equivalencia, nivel2y3Height)
-            .stroke('#000');
         this.dibujarTextoRotado(doc, 'EQUIVALENCIA', xPos, currentY, colWidths.equivalencia, nivel2y3Height);
+        doc.rect(xPos, currentY, colWidths.equivalencia, nivel2y3Height).stroke('#000');
 
         currentY += headerLevel2Height;
-
-        // ============ NIVEL 3: Micro-columnas CON TEXTO ROTADO -90° ============
         xPos = startX + colWidths.asignatura;
 
         for (let i = 0; i < 3; i++) {
-            // APORTE: PROMEDIO | 70%
-            doc
-                .rect(xPos, currentY, microWidths.promedio, headerLevel3Height)
-                .stroke('#000');
-            this.dibujarTextoRotado(doc, 'PROMEDIO', xPos, currentY, microWidths.promedio, headerLevel3Height);
-            xPos += microWidths.promedio;
-
-            doc
-                .rect(xPos, currentY, microWidths.ponderado70, headerLevel3Height)
-                .stroke('#000');
-            this.dibujarTextoRotado(doc, '70%', xPos, currentY, microWidths.ponderado70, headerLevel3Height);
-            xPos += microWidths.ponderado70;
-
-            // SUMATIVA: PROYECTO | 15% | EXAMEN | 15%
-            doc
-                .rect(xPos, currentY, microWidths.proyectoIntegrador, headerLevel3Height)
-                .stroke('#000');
-            this.dibujarTextoRotado(doc, 'PROYECTO', xPos, currentY, microWidths.proyectoIntegrador, headerLevel3Height);
-            xPos += microWidths.proyectoIntegrador;
-
-            doc
-                .rect(xPos, currentY, microWidths.ponderado15_1, headerLevel3Height)
-                .stroke('#000');
-            this.dibujarTextoRotado(doc, '15%', xPos, currentY, microWidths.ponderado15_1, headerLevel3Height);
-            xPos += microWidths.ponderado15_1;
-
-            doc
-                .rect(xPos, currentY, microWidths.pruebaEstructurada, headerLevel3Height)
-                .stroke('#000');
-            this.dibujarTextoRotado(doc, 'EXAMEN', xPos, currentY, microWidths.pruebaEstructurada, headerLevel3Height);
-            xPos += microWidths.pruebaEstructurada;
-
-            doc
-                .rect(xPos, currentY, microWidths.ponderado15_2, headerLevel3Height)
-                .stroke('#000');
-            this.dibujarTextoRotado(doc, '15%', xPos, currentY, microWidths.ponderado15_2, headerLevel3Height);
-            xPos += microWidths.ponderado15_2;
-
-            // NOTA TRIMESTRE: TOTAL | EQUIV
-            doc
-                .rect(xPos, currentY, microWidths.notaTotal, headerLevel3Height)
-                .stroke('#000');
-            this.dibujarTextoRotado(doc, 'NOTA TOTAL', xPos, currentY, microWidths.notaTotal, headerLevel3Height);
-            xPos += microWidths.notaTotal;
-
-            doc
-                .rect(xPos, currentY, microWidths.equivalencia, headerLevel3Height)
-                .stroke('#000');
-            this.dibujarTextoRotado(doc, 'EQUIV', xPos, currentY, microWidths.equivalencia, headerLevel3Height);
-            xPos += microWidths.equivalencia;
+            const micros = [
+                { t: 'PROMEDIO', w: microWidths.promedio },
+                { t: '70%', w: microWidths.ponderado70 },
+                { t: 'PROYECTO', w: microWidths.proyectoIntegrador },
+                { t: '15%', w: microWidths.ponderado15_1 },
+                { t: 'EXAMEN', w: microWidths.pruebaEstructurada },
+                { t: '15%', w: microWidths.ponderado15_2 },
+                { t: 'NOTA TOTAL', w: microWidths.notaTotal },
+                { t: 'EQUIV', w: microWidths.equivalencia }
+            ];
+            micros.forEach(m => {
+                this.dibujarTextoRotado(doc, m.t, xPos, currentY, m.w, headerLevel3Height);
+                doc.rect(xPos, currentY, m.w, headerLevel3Height).stroke('#000');
+                xPos += m.w;
+            });
         }
 
         currentY += headerLevel3Height;
+
         // ============ FILAS DE MATERIAS ============
-        doc.fontSize(5).font('Helvetica');
+        const todasMaterias = Array.from(new Set(datos.trimestres.flatMap(t => t.materias.map(m => m.materia_nombre))));
 
-        // Obtener todas las materias únicas
-        const todasMaterias = new Set<string>();
-        datos.trimestres.forEach(trim => {
-            trim.materias.forEach(mat => todasMaterias.add(mat.materia_nombre));
-        });
-
-        const materiasArray = Array.from(todasMaterias);
-        materiasArray.forEach((materiaNombre, index) => {
+        todasMaterias.forEach(materiaNombre => {
             const rowHeight = 10;
-
-            // Celda de asignatura
             doc.rect(startX, currentY, colWidths.asignatura, rowHeight).stroke('#000');
-            doc.fontSize(5).font('Helvetica')
-                .text(materiaNombre, startX + 2, currentY + 2, {
-                    width: colWidths.asignatura - 4,
-                    ellipsis: true
-                });
+            doc.fontSize(5).font('Helvetica').text(materiaNombre, startX + 2, currentY + 2, { width: colWidths.asignatura - 4, ellipsis: true });
 
             xPos = startX + colWidths.asignatura;
 
-            // Datos por trimestre
-            for (let trimestreNum = 1; trimestreNum <= 3; trimestreNum++) {
-                const trimestre = datos.trimestres.find(t => t.trimestre_numero === trimestreNum);
-                const materia = trimestre?.materias.find(m => m.materia_nombre === materiaNombre);
+            for (let i = 1; i <= 3; i++) {
+                const mat = datos.trimestres.find(t => t.trimestre_numero === i)?.materias.find(m => m.materia_nombre === materiaNombre);
+                const vals = [
+                    mat?.promedio_insumos, mat?.ponderado_insumos, mat?.nota_proyecto,
+                    mat?.ponderado_proyecto, mat?.nota_examen, mat?.ponderado_examen, mat?.nota_final
+                ];
+                const widths = [
+                    microWidths.promedio, microWidths.ponderado70, microWidths.proyectoIntegrador,
+                    microWidths.ponderado15_1, microWidths.pruebaEstructurada, microWidths.ponderado15_2, microWidths.notaTotal
+                ];
 
-                // APORTE: Promedio
-                doc.rect(xPos, currentY, microWidths.promedio, rowHeight).stroke('#000');
-                const promedio = materia?.promedio_insumos ?? null;
-                doc.text(promedio !== null ? promedio.toFixed(2) : '-', xPos, currentY + 2, {
-                    width: microWidths.promedio,
-                    align: 'center'
+                vals.forEach((v, idx) => {
+                    doc.rect(xPos, currentY, widths[idx], rowHeight).stroke('#000');
+                    doc.text(v != null ? v.toFixed(2) : '-', xPos, currentY + 2, { width: widths[idx], align: 'center' });
+                    xPos += widths[idx];
                 });
-                xPos += microWidths.promedio;
 
-                // APORTE: 70%
-                doc.rect(xPos, currentY, microWidths.ponderado70, rowHeight).stroke('#000');
-                const ponderado70 = materia?.ponderado_insumos ?? null;
-                doc.text(ponderado70 !== null ? ponderado70.toFixed(2) : '-', xPos, currentY + 2, {
-                    width: microWidths.ponderado70,
-                    align: 'center'
-                });
-                xPos += microWidths.ponderado70;
-
-                // SUMATIVA: Proyecto
-                doc.rect(xPos, currentY, microWidths.proyectoIntegrador, rowHeight).stroke('#000');
-                const proyecto = materia?.nota_proyecto ?? null;
-                doc.text(proyecto !== null ? proyecto.toFixed(2) : '-', xPos, currentY + 2, {
-                    width: microWidths.proyectoIntegrador,
-                    align: 'center'
-                });
-                xPos += microWidths.proyectoIntegrador;
-
-                // SUMATIVA: 15% (Proyecto)
-                doc.rect(xPos, currentY, microWidths.ponderado15_1, rowHeight).stroke('#000');
-                const ponderado15_1 = materia?.ponderado_proyecto ?? null;
-                doc.text(ponderado15_1 !== null ? ponderado15_1.toFixed(2) : '-', xPos, currentY + 2, {
-                    width: microWidths.ponderado15_1,
-                    align: 'center'
-                });
-                xPos += microWidths.ponderado15_1;
-
-                // SUMATIVA: Examen
-                doc.rect(xPos, currentY, microWidths.pruebaEstructurada, rowHeight).stroke('#000');
-                const examen = materia?.nota_examen ?? null;
-                doc.text(examen !== null ? examen.toFixed(2) : '-', xPos, currentY + 2, {
-                    width: microWidths.pruebaEstructurada,
-                    align: 'center'
-                });
-                xPos += microWidths.pruebaEstructurada;
-
-                // SUMATIVA: 15% (Examen)
-                doc.rect(xPos, currentY, microWidths.ponderado15_2, rowHeight).stroke('#000');
-                const ponderado15_2 = materia?.ponderado_examen ?? null;
-                doc.text(ponderado15_2 !== null ? ponderado15_2.toFixed(2) : '-', xPos, currentY + 2, {
-                    width: microWidths.ponderado15_2,
-                    align: 'center'
-                });
-                xPos += microWidths.ponderado15_2;
-
-                // NOTA TRIMESTRE: Total
-                doc.rect(xPos, currentY, microWidths.notaTotal, rowHeight).stroke('#000');
-                const notaTotal = materia?.nota_final ?? null;
-                doc.text(notaTotal !== null ? notaTotal.toFixed(2) : '-', xPos, currentY + 2, {
-                    width: microWidths.notaTotal,
-                    align: 'center'
-                });
-                xPos += microWidths.notaTotal;
-
-                // NOTA TRIMESTRE: Equivalencia
                 doc.rect(xPos, currentY, microWidths.equivalencia, rowHeight).stroke('#000');
-                const equivalencia = materia?.cualitativa ?? '';
-                doc.text(equivalencia, xPos, currentY + 2, {
-                    width: microWidths.equivalencia,
-                    align: 'center'
-                });
+                doc.text(mat?.cualitativa || '-', xPos, currentY + 2, { width: microWidths.equivalencia, align: 'center' });
                 xPos += microWidths.equivalencia;
             }
 
-            // 🆕 COLUMNAS DE SUPLETORIO
-            const promedioAnualData = datos.promedios_anuales?.find(
-                p => p.materia_nombre === materiaNombre
-            );
+            const promAnual = datos.promedios_anuales?.find(p => p.materia_nombre === materiaNombre);
 
-            // 1. PROMEDIO FINAL (3 TRIMESTRES)
+            // 1. Promedio Anual (3 Trimestres)
             doc.rect(xPos, currentY, colWidths.promedioFinal3Trim, rowHeight).stroke('#000');
-            const promedioAnual = promedioAnualData?.promedio_anual ?? null;
-            doc.text(
-                promedioAnual !== null ? promedioAnual.toFixed(2) : '-',
-                xPos,
-                currentY + 2,
-                { width: colWidths.promedioFinal3Trim, align: 'center' }
-            );
+            doc.text(promAnual ? promAnual.promedio_anual.toFixed(2) : '-', xPos, currentY + 2, { width: colWidths.promedioFinal3Trim, align: 'center' });
             xPos += colWidths.promedioFinal3Trim;
 
-            // 2. CALIFICACIÓN EXAMEN SUPLETORIO
+            // 2. Supletorio
             doc.rect(xPos, currentY, colWidths.califSupletorio, rowHeight).stroke('#000');
-            const notaSupletorio = promedioAnualData?.nota_supletorio ?? null;
-            doc.text(
-                notaSupletorio !== null ? notaSupletorio.toFixed(2) : '-',
-                xPos,
-                currentY + 2,
-                { width: colWidths.califSupletorio, align: 'center' }
-            );
+            doc.text(promAnual?.nota_supletorio ? promAnual.nota_supletorio.toFixed(2) : '-', xPos, currentY + 2, { width: colWidths.califSupletorio, align: 'center' });
             xPos += colWidths.califSupletorio;
 
-            // 3. PROMEDIO FINAL ANUAL (nota_para_libreta)
+            // 3. Final Anual
             doc.rect(xPos, currentY, colWidths.promedioFinalAnual, rowHeight).stroke('#000');
-            const promedioFinalAnual = promedioAnualData?.promedio_final ?? promedioAnualData?.promedio_anual ?? null;
-            doc.text(
-                promedioFinalAnual !== null ? promedioFinalAnual.toFixed(2) : '-',
-                xPos,
-                currentY + 2,
-                { width: colWidths.promedioFinalAnual, align: 'center' }
-            );
+            const notaF = promAnual?.promedio_final ?? promAnual?.promedio_anual;
+            doc.text(notaF ? notaF.toFixed(2) : '-', xPos, currentY + 2, { width: colWidths.promedioFinalAnual, align: 'center' });
             xPos += colWidths.promedioFinalAnual;
 
-            // 4. EQUIVALENCIA (cualitativa_final o cualitativa_anual)
+            // 4. Equivalencia Final
             doc.rect(xPos, currentY, colWidths.equivalencia, rowHeight).stroke('#000');
-            const cualitativaFinal = promedioAnualData?.cualitativa_final ?? promedioAnualData?.cualitativa ?? '';
-            doc.text(
-                cualitativaFinal,
-                xPos,
-                currentY + 2,
-                { width: colWidths.equivalencia, align: 'center' }
-            );
+            doc.text(promAnual?.cualitativa_final || promAnual?.cualitativa || '-', xPos, currentY + 2, { width: colWidths.equivalencia, align: 'center' });
 
             currentY += rowHeight;
         });
 
-        // ============ FILA DE PROMEDIOS ============
-        const rowHeight = 10;
-        doc
-            .rect(startX, currentY, finalTableWidth, rowHeight)
-            .fillOpacity(0.2)
-            .fill('#CCCCCC')
-            .fillOpacity(1)
-            .stroke('#000');
-
-        doc
-            .font('Helvetica-Bold')
-            .fillColor('#000')
-            .fontSize(5)
-            .text('PROMEDIOS', startX + 1, currentY + 2, { width: colWidths.asignatura - 2 });
+        // ============ FILA DE PROMEDIOS (CORREGIDO) ============
+        const rowHeightProm = 10;
+        doc.rect(startX, currentY, finalTableWidth, rowHeightProm).fillOpacity(0.2).fill('#CCCCCC').fillOpacity(1).stroke('#000');
+        doc.font('Helvetica-Bold').fillColor('#000').text('PROMEDIOS', startX + 2, currentY + 2);
 
         xPos = startX + colWidths.asignatura;
 
-        // Promedios por trimestre
-        for (let trimestreNum = 1; trimestreNum <= 3; trimestreNum++) {
-            const trimestreData = datos.trimestres.find(t => t.trimestre_numero === trimestreNum);
+        for (let i = 1; i <= 3; i++) {
+            const trim = datos.trimestres.find(t => t.trimestre_numero === i);
+            const totalMat = trim?.materias.length || 1;
 
-            if (trimestreData && trimestreData.materias.length > 0) {
-                const materias = trimestreData.materias;
-                const totalMaterias = materias.length;
+            const drawAvg = (sum: number, w: number) => {
+                doc.rect(xPos, currentY, w, rowHeightProm).stroke();
+                doc.text((sum / totalMat).toFixed(2), xPos, currentY + 2, { width: w, align: 'center' });
+                xPos += w;
+            };
 
-                const avgPromedio = materias.reduce((sum, m) => sum + (m.promedio_insumos || 0), 0) / totalMaterias;
-                const avgPonderado70 = materias.reduce((sum, m) => sum + (m.ponderado_insumos || 0), 0) / totalMaterias;
-                const avgProyecto = materias.reduce((sum, m) => sum + (m.nota_proyecto || 0), 0) / totalMaterias;
-                const avgPonderado15_1 = materias.reduce((sum, m) => sum + (m.ponderado_proyecto || 0), 0) / totalMaterias;
-                const avgExamen = materias.reduce((sum, m) => sum + (m.nota_examen || 0), 0) / totalMaterias;
-                const avgPonderado15_2 = materias.reduce((sum, m) => sum + (m.ponderado_examen || 0), 0) / totalMaterias;
-                const avgNotaTotal = materias.reduce((sum, m) => sum + m.nota_final, 0) / totalMaterias;
-                const cualitativaPromedio = this.obtenerCualitativa(avgNotaTotal);
+            drawAvg(trim?.materias.reduce((s, m) => s + (m.promedio_insumos || 0), 0) || 0, microWidths.promedio);
+            drawAvg(trim?.materias.reduce((s, m) => s + (m.ponderado_insumos || 0), 0) || 0, microWidths.ponderado70);
+            drawAvg(trim?.materias.reduce((s, m) => s + (m.nota_proyecto || 0), 0) || 0, microWidths.proyectoIntegrador);
+            drawAvg(trim?.materias.reduce((s, m) => s + (m.ponderado_proyecto || 0), 0) || 0, microWidths.ponderado15_1);
+            drawAvg(trim?.materias.reduce((s, m) => s + (m.nota_examen || 0), 0) || 0, microWidths.pruebaEstructurada);
+            drawAvg(trim?.materias.reduce((s, m) => s + (m.ponderado_examen || 0), 0) || 0, microWidths.ponderado15_2);
 
-                // Dibujar promedios
-                doc.rect(xPos, currentY, microWidths.promedio, rowHeight).stroke();
-                doc.text(avgPromedio.toFixed(2), xPos + 1, currentY + 2, { width: microWidths.promedio - 2, align: 'center' });
-                xPos += microWidths.promedio;
+            // Nota Total Trimestre
+            doc.rect(xPos, currentY, microWidths.notaTotal, rowHeightProm).stroke();
+            doc.text(trim?.promedio_general ? trim.promedio_general.toFixed(2) : '-', xPos, currentY + 2, { width: microWidths.notaTotal, align: 'center' });
+            xPos += microWidths.notaTotal;
 
-                doc.rect(xPos, currentY, microWidths.ponderado70, rowHeight).stroke();
-                doc.text(avgPonderado70.toFixed(2), xPos + 1, currentY + 2, { width: microWidths.ponderado70 - 2, align: 'center' });
-                xPos += microWidths.ponderado70;
-
-                doc.rect(xPos, currentY, microWidths.proyectoIntegrador, rowHeight).stroke();
-                doc.text(avgProyecto.toFixed(2), xPos + 1, currentY + 2, { width: microWidths.proyectoIntegrador - 2, align: 'center' });
-                xPos += microWidths.proyectoIntegrador;
-
-                doc.rect(xPos, currentY, microWidths.ponderado15_1, rowHeight).stroke();
-                doc.text(avgPonderado15_1.toFixed(2), xPos + 1, currentY + 2, { width: microWidths.ponderado15_1 - 2, align: 'center' });
-                xPos += microWidths.ponderado15_1;
-
-                doc.rect(xPos, currentY, microWidths.pruebaEstructurada, rowHeight).stroke();
-                doc.text(avgExamen.toFixed(2), xPos + 1, currentY + 2, { width: microWidths.pruebaEstructurada - 2, align: 'center' });
-                xPos += microWidths.pruebaEstructurada;
-
-                doc.rect(xPos, currentY, microWidths.ponderado15_2, rowHeight).stroke();
-                doc.text(avgPonderado15_2.toFixed(2), xPos + 1, currentY + 2, { width: microWidths.ponderado15_2 - 2, align: 'center' });
-                xPos += microWidths.ponderado15_2;
-
-                doc.rect(xPos, currentY, microWidths.notaTotal, rowHeight).stroke();
-                doc.text(avgNotaTotal.toFixed(2), xPos + 1, currentY + 2, { width: microWidths.notaTotal - 2, align: 'center' });
-                xPos += microWidths.notaTotal;
-
-                doc.rect(xPos, currentY, microWidths.equivalencia, rowHeight).stroke();
-                doc.text(cualitativaPromedio, xPos + 1, currentY + 2, { width: microWidths.equivalencia - 2, align: 'center' });
-                xPos += microWidths.equivalencia;
-
-            } else {
-                const totalWidth = subColWidths.aporte + subColWidths.sumativa + subColWidths.notaTrimestre;
-                doc.rect(xPos, currentY, totalWidth, rowHeight).stroke();
-                doc.text('-', xPos + (totalWidth / 2) - 5, currentY + 2);
-                xPos += totalWidth;
-            }
+            // Equiv Trimestre
+            doc.rect(xPos, currentY, microWidths.equivalencia, rowHeightProm).stroke();
+            doc.text(trim?.cualitativa_general || '-', xPos, currentY + 2, { width: microWidths.equivalencia, align: 'center' });
+            xPos += microWidths.equivalencia;
         }
 
-        // 🆕 PROMEDIOS DE COLUMNAS DE SUPLETORIO
-        // Promedio General Anual
-        if (datos.promedio_general_anual !== null) {
-            doc.rect(xPos, currentY, colWidths.promedioFinal3Trim, rowHeight).stroke();
-            doc.text(datos.promedio_general_anual.toFixed(2), xPos + 1, currentY + 2, {
-                width: colWidths.promedioFinal3Trim - 2,
-                align: 'center'
-            });
-        } else {
-            doc.rect(xPos, currentY, colWidths.promedioFinal3Trim, rowHeight).stroke();
-            doc.text('-', xPos + 1, currentY + 2, { width: colWidths.promedioFinal3Trim - 2, align: 'center' });
-        }
+        // --- CAMBIO CLAVE AQUÍ: Separar las dos columnas de promedios finales ---
+
+        // 1. Promedio Final (3 TRIM) -> Ahora usa promedio_general_trimestres (Ej: 7.12)
+        doc.rect(xPos, currentY, colWidths.promedioFinal3Trim, rowHeightProm).stroke();
+        doc.text(datos.promedio_general_trimestres ? datos.promedio_general_trimestres.toFixed(2) : '-', xPos, currentY + 2, { width: colWidths.promedioFinal3Trim, align: 'center' });
         xPos += colWidths.promedioFinal3Trim;
 
-        // Calificación Supletorio (vacío en fila de promedios)
-        doc.rect(xPos, currentY, colWidths.califSupletorio, rowHeight).stroke();
-        doc.text('-', xPos + 1, currentY + 2, { width: colWidths.califSupletorio - 2, align: 'center' });
+        // 2. Espacio de Supletorio (vacío)
+        doc.rect(xPos, currentY, colWidths.califSupletorio, rowHeightProm).stroke();
+        doc.text('-', xPos, currentY + 2, { width: colWidths.califSupletorio, align: 'center' });
         xPos += colWidths.califSupletorio;
 
-        if (datos.promedios_anuales && datos.promedios_anuales.length > 0) {
-            const notasFinales = datos.promedios_anuales.map(p =>
-                p.promedio_final ?? p.promedio_anual
-            );
-            const promedioNotasFinales = notasFinales.reduce((sum, nota) => sum + nota, 0) / notasFinales.length;
-
-            doc.rect(xPos, currentY, colWidths.promedioFinalAnual, rowHeight).stroke();
-            doc.text(promedioNotasFinales.toFixed(2), xPos + 1, currentY + 2, {
-                width: colWidths.promedioFinalAnual - 2,
-                align: 'center'
-            });
-        } else {
-            doc.rect(xPos, currentY, colWidths.promedioFinalAnual, rowHeight).stroke();
-            doc.text('-', xPos + 1, currentY + 2, { width: colWidths.promedioFinalAnual - 2, align: 'center' });
-        }
+        // 3. Promedio Final Anual -> Usa promedio_general_anual (Ej: 7.17)
+        doc.rect(xPos, currentY, colWidths.promedioFinalAnual, rowHeightProm).stroke();
+        doc.text(datos.promedio_general_anual ? datos.promedio_general_anual.toFixed(2) : '-', xPos, currentY + 2, { width: colWidths.promedioFinalAnual, align: 'center' });
         xPos += colWidths.promedioFinalAnual;
 
-        // Cualitativa general
-        if (datos.cualitativa_general_anual) {
-            doc.rect(xPos, currentY, colWidths.equivalencia, rowHeight).stroke();
-            doc.text(datos.cualitativa_general_anual, xPos + 1, currentY + 2, {
-                width: colWidths.equivalencia - 2,
-                align: 'center'
-            });
-        } else {
-            doc.rect(xPos, currentY, colWidths.equivalencia, rowHeight).stroke();
-            doc.text('-', xPos + 1, currentY + 2, { width: colWidths.equivalencia - 2, align: 'center' });
-        }
+        // 4. Equivalencia General
+        doc.rect(xPos, currentY, colWidths.equivalencia, rowHeightProm).stroke();
+        doc.text(datos.cualitativa_general_anual || '-', xPos, currentY + 2, { width: colWidths.equivalencia, align: 'center' });
 
-        currentY += rowHeight + 15;
+        currentY += rowHeightProm + 15;
 
-        // ============ VALIDAR SI ES BÁSICA O BACHILLERATO ============
+        // Determinar si llamar a Básica o Bachillerato
         const nivelesBasica = ['OCTAVO', 'NOVENO', 'DECIMO'];
-        const esBasica = nivelesBasica.includes(datos.curso.nivel);
-
-        if (esBasica) {
+        if (nivelesBasica.some(n => datos.curso.nivel.includes(n))) {
             this.dibujarComponentesEducativosBasica(doc, datos, currentY);
         } else {
             this.dibujarComponentesEducativosBachillerato(doc, datos, currentY);
         }
     }
-
     // ==================== COMPONENTES EDUCATIVOS PARA BÁSICA ====================
     private dibujarComponentesEducativosBasica(doc: PDFKit.PDFDocument, datos: DatosLibretaEstudiante, startY: number) {
         const marginLeft = 30;
@@ -2976,7 +2688,7 @@ export class PdfGeneratorService {
             // Notas Insumos
             estudiante.calificaciones_insumos.forEach((cal, idx) => {
                 const cellColor = idx % 2 === 0 ? '#EBF5FB' : '#FEF9E7';
-                const notaTexto = cal.nota !== null && cal.nota > 0 ? cal.nota.toFixed(2) : '-';
+                const notaTexto = cal.nota !== null ? cal.nota.toFixed(2) : '-';
                 drawInsumoCell(xPos, currentY, insumoWidth, rowHeight, notaTexto, cellColor);
                 xPos += insumoWidth;
             });

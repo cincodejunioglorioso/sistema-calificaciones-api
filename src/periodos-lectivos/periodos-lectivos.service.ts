@@ -224,6 +224,15 @@ export class PeriodosLectivosService {
       };
     }
 
+    if (periodo.estado_supletorio !== EstadoSupletorio.CERRADO) {
+      return {
+        puede_cerrar: false,
+        errores: [
+          `Debe cerrar la fase de supletorios antes de finalizar el período. Estado actual: ${periodo.estado_supletorio}`
+        ]
+      };
+    }
+
     // Contar entidades que se afectarán
     const totalMatriculas = await this.dataSource.getRepository(Matricula).count({
       where: {
@@ -259,6 +268,7 @@ export class PeriodosLectivosService {
   }
 
   // 👑 ADMIN: Finalizar período (ACTIVO → FINALIZADO)
+
   async cambiarEstado(periodo_id: string) {
     const periodo = await this.findOne(periodo_id);
 
@@ -283,14 +293,146 @@ export class PeriodosLectivosService {
       );
     }
 
-    // Finalizar
-    periodo.estado = EstadoPeriodo.FINALIZADO;
-    await this.periodoLectivoRepository.save(periodo);
+    // 🔥 TRANSACCIÓN: Actualizar estudiantes, matrículas, cursos y asignaciones
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    return {
-      message: `Período ${periodo.nombre} finalizado exitosamente`,
-      periodo
-    };
+    try {
+      let estudiantesGraduados = 0;
+      let estudiantesSinMatricula = 0;
+
+      // ================================================
+      // 1️⃣ OBTENER TODAS LAS MATRÍCULAS ACTIVAS DEL PERÍODO
+      // ================================================
+      const matriculasActivas = await queryRunner.manager
+        .createQueryBuilder(Matricula, 'matricula')
+        .innerJoinAndSelect('matricula.curso', 'curso')
+        .innerJoinAndSelect('matricula.estudiante', 'estudiante')
+        .where('matricula.periodo_lectivo_id = :periodoId', { periodoId: periodo_id })
+        .andWhere('matricula.estado = :estado', { estado: EstadoMatricula.ACTIVO })
+        .andWhere('estudiante.estado = :estadoEstudiante', { estadoEstudiante: EstadoEstudiante.ACTIVO })
+        .getMany();
+
+      // ================================================
+      // 2️⃣ PROCESAR ESTUDIANTES DE 3° BACHILLERATO
+      // ================================================
+      const matriculasTercero = matriculasActivas.filter(
+        m => m.curso.nivel === NivelCurso.TERCERO_BACHILLERATO
+      );
+
+      for (const matricula of matriculasTercero) {
+        // Obtener todos los promedios del estudiante en este período
+        const promedios = await queryRunner.manager
+          .createQueryBuilder(PromedioPeriodo, 'pp')
+          .where('pp.estudiante_id = :estudianteId', { estudianteId: matricula.estudiante_id })
+          .andWhere('pp.periodo_lectivo_id = :periodoId', { periodoId: periodo_id })
+          .getMany();
+
+        // ✅ APROBADO si TODOS los promedios tienen promedio_anual >= 7.0
+        const todosAprobados = promedios.length > 0 &&
+          promedios.every(p => Number(p.promedio_anual) >= 7.0);
+
+        if (todosAprobados) {
+          // ✅ Graduado
+          await queryRunner.manager.update(
+            Estudiante,
+            { id: matricula.estudiante_id },
+            { estado: EstadoEstudiante.GRADUADO }
+          );
+          estudiantesGraduados++;
+        } else {
+          // ❌ No aprobó todas las materias → SIN_MATRICULA
+          await queryRunner.manager.update(
+            Estudiante,
+            { id: matricula.estudiante_id },
+            { estado: EstadoEstudiante.SIN_MATRICULA }
+          );
+          estudiantesSinMatricula++;
+        }
+      }
+
+      // ================================================
+      // 3️⃣ PROCESAR ESTUDIANTES QUE NO SON DE 3° BACHILLERATO
+      // ================================================
+      const otrasMatriculas = matriculasActivas.filter(
+        m => m.curso.nivel !== NivelCurso.TERCERO_BACHILLERATO
+      );
+
+      for (const matricula of otrasMatriculas) {
+        // Todos pasan a SIN_MATRICULA (esperan nueva matrícula el siguiente período)
+        await queryRunner.manager.update(
+          Estudiante,
+          { id: matricula.estudiante_id },
+          { estado: EstadoEstudiante.SIN_MATRICULA }
+        );
+        estudiantesSinMatricula++;
+      }
+
+      // ================================================
+      // 4️⃣ FINALIZAR TODAS LAS MATRÍCULAS ACTIVAS
+      // ================================================
+      const resultMatriculas = await queryRunner.manager.update(
+        Matricula,
+        {
+          periodo_lectivo_id: periodo_id,
+          estado: EstadoMatricula.ACTIVO
+        },
+        { estado: EstadoMatricula.FINALIZADO }
+      );
+
+      // ================================================
+      // 5️⃣ INACTIVAR ASIGNACIONES (MATERIA-CURSO)
+      // ================================================
+      const resultMateriasCurso = await queryRunner.manager
+        .createQueryBuilder()
+        .update('materias_curso')
+        .set({ estado: EstadoMateriaCurso.INACTIVO })
+        .where('periodo_lectivo_id = :periodoId', { periodoId: periodo_id })
+        .andWhere('estado = :estado', { estado: EstadoMateriaCurso.ACTIVO })
+        .execute();
+
+      // ================================================
+      // 6️⃣ INACTIVAR CURSOS
+      // ================================================
+      const resultCursos = await queryRunner.manager
+        .createQueryBuilder()
+        .update('cursos')
+        .set({ estado: EstadoCurso.INACTIVO })
+        .where('periodo_lectivo_id = :periodoId', { periodoId: periodo_id })
+        .andWhere('estado = :estado', { estado: EstadoCurso.ACTIVO })
+        .execute();
+
+      // ================================================
+      // 7️⃣ FINALIZAR PERÍODO LECTIVO
+      // ================================================
+      await queryRunner.manager.update(
+        PeriodoLectivo,
+        { id: periodo_id },
+        { estado: EstadoPeriodo.FINALIZADO }
+      );
+
+      await queryRunner.commitTransaction();
+
+      return {
+        message: `Período ${periodo.nombre} finalizado exitosamente`,
+        periodo: await this.findOne(periodo_id),
+        estadisticas: {
+          estudiantes_graduados: estudiantesGraduados,
+          estudiantes_sin_matricula: estudiantesSinMatricula,
+          matriculas_finalizadas: resultMatriculas.affected || 0,
+          materias_curso_inactivadas: resultMateriasCurso.affected || 0,
+          cursos_inactivados: resultCursos.affected || 0
+        },
+        advertencia: 'Esta acción es IRREVERSIBLE. No se puede reactivar un período finalizado.'
+      };
+
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   // 👑 ADMIN: Activar fase de supletorios
@@ -473,143 +615,6 @@ export class PeriodosLectivosService {
       }
     };
   }
-
-
-  // 👑 ADMIN: Finalizar período lectivo (IRREVERSIBLE)
-  async finalizarPeriodoLectivo(id: string) {
-    const validacion = await this.validarCierrePeriodo(id);
-
-    if (!validacion.puede_cerrar) {
-      throw new BadRequestException(validacion.errores.join(', '));
-    }
-
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-
-      // ESTUDIANTES
-      // Obtener estudiantes de 3° Bachillerato con matrícula ACTIVA
-      const matriculasTercero = await queryRunner.manager
-        .createQueryBuilder(Matricula, 'matricula')
-        .innerJoinAndSelect('matricula.curso', 'curso')
-        .where('matricula.periodo_lectivo_id = :periodoId', { periodoId: id })
-        .andWhere('matricula.estado = :estado', { estado: EstadoMatricula.ACTIVO })
-        .andWhere('curso.nivel = :nivel', { nivel: NivelCurso.TERCERO_BACHILLERATO })
-        .getMany();
-
-      let estudiantesGraduados = 0;
-      let estudiantesSinMatricula = 0;
-
-      // Procesar estudiantes de 3° Bachillerato (graduación condicional)
-      for (const matricula of matriculasTercero) {
-        // Obtener promedios anuales del estudiante
-        const promedios = await queryRunner.manager
-          .createQueryBuilder('promedio_periodo', 'pp')
-          .where('pp.estudiante_id = :estudianteId', { estudianteId: matricula.estudiante_id })
-          .andWhere('pp.periodo_lectivo_id = :periodoId', { periodoId: id })
-          .getMany();
-
-        // Verificar si TODOS los promedios >= 7.0
-        const todosAprobados = promedios.length > 0 &&
-          promedios.every(p => Number(p.promedio_anual) >= 7.0);
-
-        if (todosAprobados) {
-          await queryRunner.manager.update(
-            Estudiante,
-            { id: matricula.estudiante_id },
-            { estado: EstadoEstudiante.GRADUADO }
-          );
-          estudiantesGraduados++;
-        } else {
-          await queryRunner.manager.update(
-            Estudiante,
-            { id: matricula.estudiante_id },
-            { estado: EstadoEstudiante.SIN_MATRICULA }
-          );
-          estudiantesSinMatricula++;
-        }
-      }
-
-      // Estudiantes que no son de 3° Bachillerato pasan a estado → SIN_MATRICULA
-      const otrasMatriculas = await queryRunner.manager
-        .createQueryBuilder(Matricula, 'matricula')
-        .innerJoin('matricula.curso', 'curso')
-        .where('matricula.periodo_lectivo_id = :periodoId', { periodoId: id })
-        .andWhere('matricula.estado = :estado', { estado: EstadoMatricula.ACTIVO })
-        .andWhere('curso.nivel != :nivel', { nivel: NivelCurso.TERCERO_BACHILLERATO })
-        .select('matricula.estudiante_id')
-        .distinct(true)
-        .getRawMany();
-
-      for (const { estudiante_id } of otrasMatriculas) {
-        await queryRunner.manager.update(
-          Estudiante,
-          { id: estudiante_id },
-          { estado: EstadoEstudiante.SIN_MATRICULA }
-        );
-        estudiantesSinMatricula++;
-      }
-
-      // MATRÍCULAS
-      const resultMatriculas = await queryRunner.manager.update(
-        Matricula,
-        {
-          periodo_lectivo_id: id,
-          estado: EstadoMatricula.ACTIVO
-        },
-        { estado: EstadoMatricula.FINALIZADO }
-      );
-
-      // MATERIA-CURSO = Asignaciones ACTIVAS -> INACTIVAS
-      const resultMateriasCurso = await queryRunner.manager
-        .createQueryBuilder()
-        .update('materias_curso')
-        .set({ estado: EstadoMateriaCurso.INACTIVO })
-        .where('periodo_lectivo_id = :periodoId', { periodoId: id })
-        .andWhere('estado = :estado', { estado: EstadoMateriaCurso.ACTIVO })
-        .execute();
-
-      // CURSOS = Cursos ACTIVOS -> INACTIVOS
-      const resultCursos = await queryRunner.manager
-        .createQueryBuilder()
-        .update('cursos')
-        .set({ estado: EstadoCurso.INACTIVO })
-        .where('periodo_lectivo_id = :periodoId', { periodoId: id })
-        .andWhere('estado = :estado', { estado: EstadoCurso.ACTIVO })
-        .execute();
-
-      // PERÍODO LECTIVO ACTIVO -> FINALIZADO
-      await queryRunner.manager.update(
-        PeriodoLectivo,
-        { id },
-        { estado: EstadoPeriodo.FINALIZADO }
-      );
-
-      await queryRunner.commitTransaction();
-
-      return {
-        message: 'Período lectivo finalizado exitosamente',
-        periodo: await this.findOne(id),
-        estadisticas: {
-          estudiantes_graduados: estudiantesGraduados,
-          estudiantes_sin_matricula: estudiantesSinMatricula,
-          matriculas_finalizadas: resultMatriculas.affected || 0,
-          materias_curso_inactivadas: resultMateriasCurso.affected || 0,
-          cursos_inactivados: resultCursos.affected || 0
-        },
-        advertencia: 'Esta acción es IRREVERSIBLE. No se puede reactivar un período finalizado.'
-      };
-
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      throw error;
-    } finally {
-      await queryRunner.release();
-    }
-  }
-
 
   private async contarTrimestres(periodoId: string): Promise<number> {
     try {

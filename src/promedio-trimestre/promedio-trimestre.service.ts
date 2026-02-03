@@ -99,27 +99,29 @@ export class PromedioTrimestreService {
       throw new BadRequestException('El estudiante no tiene insumos calificados en esta materia-trimestre');
     }
 
-    const ponderado_insumos = Number((insumosData.promedio * (porcentajeInsumos / 100)).toFixed(2));
+    // Calculamos los valores RAW (con todos los decimales de JS)
+    const rawPonderadoInsumos = insumosData.promedio * (porcentajeInsumos / 100);
 
     const proyectoData = await this.obtenerNotaProyecto(estudiante_id, materiaCurso.curso_id, trimestre_id);
-
-    // ✅ FIX: Validar null/undefined, NO rechazar 0
     if (proyectoData === null || proyectoData === undefined) {
       throw new BadRequestException('El estudiante no tiene calificación de proyecto integrador en este trimestre');
     }
-
-    const ponderado_proyecto = Number((proyectoData * (porcentajeProyecto / 100)).toFixed(2));
+    const rawPonderadoProyecto = proyectoData * (porcentajeProyecto / 100);
 
     const examenData = await this.obtenerNotaExamen(estudiante_id, materia_curso_id, trimestre_id);
-
-    // ✅ FIX: Validar null/undefined, NO rechazar 0
     if (examenData === null || examenData === undefined) {
       throw new BadRequestException('El estudiante no tiene calificación de examen en esta materia-trimestre');
     }
+    const rawPonderadoExamen = examenData * (porcentajeExamen / 100);
 
-    const ponderado_examen = Number((examenData * (porcentajeExamen / 100)).toFixed(2));
+    // ✅ LA CLAVE: Sumamos los valores exactos primero
+    const sumaExacta = rawPonderadoInsumos + rawPonderadoProyecto + rawPonderadoExamen;
 
-    const nota_final_trimestre = Number((ponderado_insumos + ponderado_proyecto + ponderado_examen).toFixed(2));
+    // Ahora sí, redondeamos el final y los parciales para la DB
+    const nota_final_trimestre = Math.round(sumaExacta * 100) / 100;
+    const ponderado_insumos = Math.round(rawPonderadoInsumos * 100) / 100;
+    const ponderado_proyecto = Math.round(rawPonderadoProyecto * 100) / 100;
+    const ponderado_examen = Math.round(rawPonderadoExamen * 100) / 100;
 
     const cualitativa = calcularConversionCualitativa(nota_final_trimestre);
 

@@ -11,6 +11,7 @@ export class RegistroImportacionDto {
   curso_id?: string; // UUID del curso en BD
   valido: boolean;
   errores: string[];
+  ya_matriculado?: boolean;
 }
 
 export class ResumenImportacionDto {
@@ -18,6 +19,7 @@ export class ResumenImportacionDto {
   total_registros: number;
   validos: number;
   invalidos: number;
+  existentes: number;
   registros: RegistroImportacionDto[];
 }
 
