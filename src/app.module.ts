@@ -27,22 +27,37 @@ import { RecuperacionExamenModule } from './recuperacion-examen/recuperacion-exa
 @Module({  
   imports: [
     ConfigModule.forRoot({
-      envFilePath: `.env.${process.env.NODE_ENV}`
+      envFilePath: `.env.${process.env.NODE_ENV}`,
+      isGlobal: true,
     }),
 
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get('DB_HOST'),
-        port: configService.get('DB_PORT'),
-        username: configService.get('DB_USERNAME'),
-        database: configService.get('DB_NAME'),
-        password: configService.get('DB_PASSWORD'),
-        entities: [ __dirname + '/../**/*.entity{.ts,.js}' ],
-        synchronize: false
-      }),
-      inject: [ConfigService]
+      useFactory: (configService: ConfigService) => {
+        const databaseUrl = configService.get('DATABASE_URL');
+
+        if (databaseUrl) {
+          return {
+            type: 'postgres',
+            url: databaseUrl,
+            entities: [__dirname + '/../**/*.entity{.ts,.js}'],
+            synchronize: false,
+            ssl: { rejectUnauthorized: false },
+          };
+        }
+
+        return {
+          type: 'postgres',
+          host: configService.get('DB_HOST'),
+          port: configService.get('DB_PORT'),
+          username: configService.get('DB_USERNAME'),
+          database: configService.get('DB_NAME'),
+          password: configService.get('DB_PASSWORD'),
+          entities: [__dirname + '/../**/*.entity{.ts,.js}'],
+          synchronize: false,
+        };
+      },
+      inject: [ConfigService],
     }),
 
     UsuariosModule,
