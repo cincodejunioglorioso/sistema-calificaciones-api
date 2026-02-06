@@ -6,7 +6,7 @@ import { Usuario, Role, Estado } from './entities/usuario.entity';
 import { Docente, NivelAsignado } from '../docentes/entities/docente.entity';
 import { RegisterDto } from './dto/register.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { CambiarPasswordDto } from './dto/cambiar-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 

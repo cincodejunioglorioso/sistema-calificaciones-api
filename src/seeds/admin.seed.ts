@@ -2,7 +2,7 @@
 import { DataSource } from 'typeorm';
 import { Usuario, Role, Estado } from '../usuarios/entities/usuario.entity';
 import { Docente, NivelAsignado } from '../docentes/entities/docente.entity';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 
 export class AdminSeed {
   public async run(dataSource: DataSource): Promise<void> {
