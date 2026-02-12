@@ -11,7 +11,7 @@ import { DocenteOrAdminGuard } from '../auth/guards/docente-or-admin.guard';
 @UseGuards(JwtAuthGuard)
 @Controller('calificacion-insumo')
 export class CalificacionInsumoController {
-  constructor(private readonly calificacionInsumoService: CalificacionInsumoService) {}
+  constructor(private readonly calificacionInsumoService: CalificacionInsumoService) { }
 
   // 🎓 DOCENTE: Crear calificación (individual o batch)
   @Post()
@@ -56,7 +56,7 @@ export class CalificacionInsumoController {
       insumo_id,
       promedio
     };
-  }  
+  }
 
   // 👑 ADMIN + 🎓 DOCENTE: Listar estudiantes sin calificar
   @Get('insumo/:insumo_id/sin-calificar')
@@ -66,7 +66,23 @@ export class CalificacionInsumoController {
   ) {
     const docente_id = req.user.rol === Role.DOCENTE ? req.user.docente_id : null;
     return await this.calificacionInsumoService.estudiantesSinCalificar(
-      insumo_id, 
+      insumo_id,
+      docente_id
+    );
+  }
+
+  // 👑 ADMIN + 🎓 DOCENTE: Obtener TODAS las calificaciones por materia_curso y trimestre (BATCH)
+  @Get('batch/materia-curso/:materia_curso_id/trimestre/:trimestre_id')
+  @UseGuards(DocenteOrAdminGuard)
+  async findBatchByMateriaCursoYTrimestre(
+    @Param('materia_curso_id') materia_curso_id: string,
+    @Param('trimestre_id') trimestre_id: string,
+    @Req() req
+  ) {
+    const docente_id = req.user.rol === Role.DOCENTE ? req.user.docente_id : null;
+    return await this.calificacionInsumoService.findBatchByMateriaCursoYTrimestre(
+      materia_curso_id,
+      trimestre_id,
       docente_id
     );
   }
@@ -86,13 +102,13 @@ export class CalificacionInsumoController {
     @Req() req
   ) {
     return await this.calificacionInsumoService.update(
-      id, 
-      updateDto, 
+      id,
+      updateDto,
       req.user.docente_id
     );
   }
 
-// 👑 ADMIN: Eliminar calificación (solo debugging)
+  // 👑 ADMIN: Eliminar calificación (solo debugging)
   @Delete(':id')
   async remove(@Param('id') id: string, @Req() req) {
     const docente_id = req.user.rol === Role.DOCENTE ? req.user.docente_id : undefined;

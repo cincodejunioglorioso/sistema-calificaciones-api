@@ -72,7 +72,7 @@ export class InsumosController {
   }
 
   // 👑 ADMIN: Reactivar
-  @UseGuards(AdminGuard)
+  @UseGuards(DocenteOrAdminGuard)
   @Patch(':id/reactivar')
   reactivar(@Param('id') id: string) {
     return this.insumosService.reactivar(id);

@@ -185,6 +185,60 @@ export class CalificacionInsumoService {
     return calificaciones;
   }
 
+  // 👑 ADMIN + 🎓 DOCENTE: Obtener TODAS las calificaciones agrupadas por insumo (BATCH)
+  async findBatchByMateriaCursoYTrimestre(
+    materia_curso_id: string,
+    trimestre_id: string,
+    docente_id?: string
+  ) {
+    // 1. Obtener todos los insumos de esa materia_curso y trimestre
+    const insumos = await this.insumoService.findByMateriaCursoYTrimestre(
+      materia_curso_id,
+      trimestre_id
+    );
+
+    // 2. Validar permisos si es docente
+    if (docente_id && insumos.length > 0) {
+      const primerInsumo = insumos[0];
+      if (primerInsumo.materia_curso.docente_id !== docente_id) {
+        throw new ForbiddenException('No tienes permiso para ver las calificaciones de esta materia');
+      }
+    }
+
+    // 3. Obtener IDs de todos los insumos
+    const insumoIds = insumos.map(insumo => insumo.id);
+
+    // 4. Obtener TODAS las calificaciones de esos insumos en UNA sola query
+    const todasLasCalificaciones = await this.calificacionInsumoRepository.find({
+      where: {
+        insumo_id: In(insumoIds)
+      },
+      relations: ['estudiante', 'docente'],
+      order: {
+        estudiante: { nombres_completos: 'ASC' }
+      }
+    });
+
+    // 5. Agrupar calificaciones por insumo_id
+    const calificacionesPorInsumo: Record<string, CalificacionInsumo[]> = {};
+
+    // Inicializar con arrays vacíos para cada insumo
+    insumos.forEach(insumo => {
+      calificacionesPorInsumo[insumo.id] = [];
+    });
+
+    // Llenar con las calificaciones correspondientes
+    todasLasCalificaciones.forEach(calificacion => {
+      if (!calificacionesPorInsumo[calificacion.insumo_id]) {
+        calificacionesPorInsumo[calificacion.insumo_id] = [];
+      }
+      calificacionesPorInsumo[calificacion.insumo_id].push(calificacion);
+    });
+
+    return calificacionesPorInsumo;
+  }
+
+
   // 🎓 DOCENTE: Actualizar calificación
   async update(id: string, updateCalificacionInsumoDto: UpdateCalificacionInsumoDto, docente_id: string) {
     const calificacion = await this.findOne(id, docente_id);
