@@ -27,6 +27,7 @@ export class DocentesService {
         telefono: true,
         nivelAsignado: true,
         perfil_completo: true,
+        foto_perfil_url: true,
         createdAt: true,
         usuario_id: {
           id: true,

@@ -11,7 +11,7 @@ export class ReportesController {
   constructor(private readonly reportesService: ReportesService) { }
 
   // ==========================================
-  // RUTAS ESPECÍFICAS PRIMERO (con texto literal)
+  // RUTAS ESPECÍFICAS
   // ==========================================
 
   /**
@@ -25,6 +25,14 @@ export class ReportesController {
     @Request() req: any,
     @Res() res: Response,
   ) {
+    // 1. Obtenemos los datos
+    const datos = await this.reportesService.generarDatosLibretaEstudiante(
+      estudiante_id,
+      trimestre_id,
+      req.user.id,
+      req.user.docente_id
+    );
+
     const pdfBuffer = await this.reportesService.generarLibretaPDF(
       estudiante_id,
       trimestre_id,
@@ -32,9 +40,22 @@ export class ReportesController {
       req.user.docente_id
     );
 
+    // 2. SOLUCIÓN AL ERROR:
+    // Buscamos el trimestre actual dentro del array de trimestres para sacar el nombre
+    // Tu interfaz dice que trimestres es CalificacionesTrimestreLibreta[]
+    const trimestreActual = datos.trimestres.find(t => t.trimestre_estado === 'FINALIZADO' || t.materias.length > 0);
+
+    // Si por alguna razón no lo encuentra, usamos un fallback
+    const nombreTrimestre = trimestreActual
+      ? trimestreActual.trimestre_nombre.replace(/\s+/g, '_')
+      : 'Reporte';
+
+    const nombreEstudiante = datos.estudiante.nombres_completos.replace(/\s+/g, '_');
+    const nombreArchivo = `Libreta_${nombreEstudiante}_${nombreTrimestre}.pdf`;
+
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=libreta_${estudiante_id}.pdf`,
+      'Content-Disposition': `attachment; filename="${nombreArchivo}"`,
       'Content-Length': pdfBuffer.length,
     });
 
@@ -74,11 +95,17 @@ export class ReportesController {
     @Param('matricula_id') matricula_id: string,
     @Res() res: Response,
   ) {
+
+    const datos = await this.reportesService.generarDatosLibretaPorMatricula(matricula_id);
     const pdfBuffer = await this.reportesService.generarLibretaPorMatriculaPDF(matricula_id);
+
+    const nombreEstudiante = datos.estudiante.nombres_completos.replace(/\s+/g, '_');
+    const periodo = datos.periodo.nombre.replace(/\s+/g, '_');
+    const nombreArchivo = `Libreta_${nombreEstudiante}_${periodo}.pdf`;
 
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=libreta_historica_${matricula_id}.pdf`,
+      'Content-Disposition': `attachment; filename=${nombreArchivo}`,
       'Content-Length': pdfBuffer.length,
     });
 
@@ -113,17 +140,28 @@ export class ReportesController {
     @Request() req: any,
     @Res() res: Response,
   ) {
+
+    const datosRanking = await this.reportesService.generarDatosConcentrado(
+      curso_id,
+      trimestre_id,
+      req.user.docente_id
+    );
+
     const pdfBuffer = await this.reportesService.generarLibretasCursoConsolidado(
       curso_id,
       trimestre_id,
       req.user.docente_id
     );
 
-    const timestamp = new Date().toISOString().split('T')[0];
+    const nivel = datosRanking.curso.nivel.replace(/\s+/g, '_');
+    const paralelo = datosRanking.curso.paralelo;
+    const trimestre = datosRanking.trimestre.nombre.replace(/\s+/g, '_');
+
+    const nombreArchivo = `Consolidado_${nivel}_${paralelo}_${trimestre}.pdf`;
 
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=libretas_curso_${timestamp}.pdf`,
+      'Content-Disposition': `attachment; filename="${nombreArchivo}"`,
       'Content-Length': pdfBuffer.length,
     });
 
@@ -141,17 +179,25 @@ export class ReportesController {
     @Request() req: any,
     @Res() res: Response,
   ) {
+    const datos = await this.reportesService.generarDatosConcentrado(
+      curso_id,
+      trimestre_id,
+      req.user.docente_id
+    );
     const pdfBuffer = await this.reportesService.generarConcentradoPDF(
       curso_id,
       trimestre_id,
       req.user.docente_id
     );
 
-    const timestamp = new Date().toISOString().split('T')[0];
+    const nivel = datos.curso.nivel.replace(/\s+/g, '_');
+    const paralelo = datos.curso.paralelo;
+    const trimestre = datos.trimestre.nombre.replace(/\s+/g, '_');
+    const nombreArchivo = `Concentrado_${nivel}_${paralelo}_${trimestre}.pdf`;
 
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=concentrado_calificaciones_${timestamp}.pdf`,
+      'Content-Disposition': `attachment; filename=${nombreArchivo}`,
       'Content-Length': pdfBuffer.length,
     });
 
@@ -184,7 +230,6 @@ export class ReportesController {
 
   /**
    * GET PDF de reporte de insumos
-   * ⚠️ DEBE IR ANTES de /materia/:materia_curso_id
    */
   @Get('insumos/:materia_curso_id/pdf')
   @UseGuards(DocenteGuard)
@@ -193,16 +238,24 @@ export class ReportesController {
     @Query('trimestre_id') trimestre_id: string,
     @Res() res: Response,
   ) {
+    const datos = await this.reportesService.generarDatosReporteInsumos(
+      materia_curso_id,
+      trimestre_id
+    );
     const pdfBuffer = await this.reportesService.generarReporteInsumosPDF(
       materia_curso_id,
       trimestre_id
     );
 
-    const timestamp = new Date().toISOString().split('T')[0];
+    const nivel = datos.curso.nivel.replace(/\s+/g, '_');
+    const paralelo = datos.curso.paralelo;
+    const materia = datos.materia.nombre.replace(/\s+/g, '_');
+    const trimestre = datos.trimestre.nombre.replace(/\s+/g, '_');
+    const nombreArchivo = `Aportes_${nivel}_${paralelo}_${materia}_${trimestre}.pdf`;
 
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=reporte_insumos_${timestamp}.pdf`,
+      'Content-Disposition': `attachment; filename="${nombreArchivo}"`,
       'Content-Length': pdfBuffer.length,
     });
 
@@ -211,7 +264,6 @@ export class ReportesController {
 
   /**
    * GET datos JSON de reporte de insumos
-   * ⚠️ DEBE IR ANTES de /materia/:materia_curso_id
    */
   @Get('insumos/:materia_curso_id')
   @UseGuards(DocenteGuard)
@@ -242,16 +294,24 @@ export class ReportesController {
     @Query('periodo_lectivo_id') periodo_lectivo_id: string,
     @Res() res: Response,
   ) {
+    const datos = await this.reportesService.generarDatosRendimientoAnual(
+      materia_curso_id,
+      periodo_lectivo_id
+    );
     const pdfBuffer = await this.reportesService.generarRendimientoAnualPDF(
       materia_curso_id,
       periodo_lectivo_id
     );
 
-    const timestamp = new Date().toISOString().split('T')[0];
+    const nivel = datos.curso.nivel.replace(/\s+/g, '_');
+    const paralelo = datos.curso.paralelo;
+    const materia = datos.materia.nombre.replace(/\s+/g, '_');
+    const periodo = datos.periodo.nombre.replace(/\s+/g, '_');
+    const nombreArchivo = `Rendimiento_${nivel}_${paralelo}_${materia}_${periodo}.pdf`;
 
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=rendimiento_anual_${timestamp}.pdf`,
+      'Content-Disposition': `attachment; filename=${nombreArchivo}`,
       'Content-Length': pdfBuffer.length,
     });
 
@@ -281,12 +341,11 @@ export class ReportesController {
   }
 
   // ==========================================
-  // RUTAS GENÉRICAS AL FINAL (pueden capturar texto literal)
+  // RUTAS GENÉRICAS AL FINAL
   // ==========================================
 
   /**
    * GET PDF de reporte de materia
-   * ⚠️ Esta ruta es genérica y debe ir DESPUÉS de /insumos
    */
   @Get('materia/:materia_curso_id/pdf')
   @UseGuards(DocenteOrAdminGuard)
@@ -296,14 +355,25 @@ export class ReportesController {
     @Query('trimestre_id') trimestre_id: string,
     @Res() res: Response,
   ) {
+
+    const datos = await this.reportesService.generarDatosReporteMateria(
+      materia_curso_id,
+      trimestre_id
+    );
     const pdfBuffer = await this.reportesService.generarReporteMateriaPDF(
       materia_curso_id,
       trimestre_id
     );
 
+    const nivel = datos.curso.nivel.replace(/\s+/g, '_');
+    const paralelo = datos.curso.paralelo;
+    const materia = datos.materia.nombre.replace(/\s+/g, '_');
+    const trimestre = datos.trimestre.nombre.replace(/\s+/g, '_');
+    const nombreArchivo = `Rendimiento_${nivel}_${paralelo}_${materia}_${trimestre}.pdf`;
+
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=reporte_materia_${materia_curso_id}.pdf`,
+      'Content-Disposition': `attachment; filename="${nombreArchivo}"`,
       'Content-Length': pdfBuffer.length,
     });
 
@@ -312,7 +382,6 @@ export class ReportesController {
 
   /**
    * GET datos JSON de reporte de materia
-   * ⚠️ Esta ruta es genérica y debe ir DESPUÉS de /insumos
    */
   @Get('materia/:materia_curso_id')
   @UseGuards(DocenteGuard)

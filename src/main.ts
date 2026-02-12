@@ -14,6 +14,7 @@ async function bootstrap() {
     origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    exposedHeaders: ['Content-Disposition'],
   });
     app.useGlobalPipes(new ValidationPipe({
       whitelist: true,

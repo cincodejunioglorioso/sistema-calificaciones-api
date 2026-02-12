@@ -1,5 +1,4 @@
-// nest-backend/src/reportes/interfaces/datos-reporte-materia.interface.ts
-import { ConversionCualitativa } from '../../common/enums/cualitativa.enum'; // 🔄 CAMBIO
+import { ConversionCualitativa } from '../../common/enums/cualitativa.enum';
 import { EspecialidadCurso, NivelCurso } from '../../cursos/entities/curso.entity';
 import { NombreTrimestre } from '../../trimestres/entities/trimestre.entity';
 

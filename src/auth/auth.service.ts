@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Role, Usuario } from '../usuarios/entities/usuario.entity';
+import { Estado, Role, Usuario } from '../usuarios/entities/usuario.entity';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { LoginDto } from './dto/login.dto';
@@ -25,6 +25,10 @@ export class AuthService {
 
     if (!usuario) {
       throw new UnauthorizedException('Credenciales inválidas');
+    }
+
+    if (usuario.estado === Estado.INACTIVO) {
+      throw new UnauthorizedException('Tu cuenta ha sido desactivada');
     }
 
     const isPasswordValid = await bcrypt.compare(password, usuario.password_hash);

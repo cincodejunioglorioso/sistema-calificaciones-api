@@ -1,5 +1,3 @@
-// nest-backend/src/reportes/interfaces/datos-rendimiento-anual.interface.ts
-
 import { ConversionCualitativa } from '../../common/enums/cualitativa.enum';
 import { EspecialidadCurso, NivelCurso } from '../../cursos/entities/curso.entity';
 

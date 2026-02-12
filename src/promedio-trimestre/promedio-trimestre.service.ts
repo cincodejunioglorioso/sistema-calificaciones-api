@@ -264,7 +264,7 @@ export class PromedioTrimestreService {
     return resultado;
   }
 
-  // 🔥 NUEVO: ROLLBACK DE PROMEDIOS TRIMESTRALES
+  // ROLLBACK DE PROMEDIOS TRIMESTRALES
   async rollbackPromediosTrimestre(trimestre_id: string) {
     const promedios = await this.promedioTrimestreRepository.find({
       where: { trimestre_id }

@@ -2,7 +2,7 @@
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { DatosLibretaEstudiante } from '../interfaces/datos-libreta.interface';
-import { DatosReporteMateria } from '../interfaces/datos-reporte-materia.interface';
+import { CalificacionEstudianteMateria, DatosReporteMateria } from '../interfaces/datos-reporte-materia.interface';
 import { ConversionCualitativa } from '../../common/enums/cualitativa.enum';
 import { DatosConcentradoCalificaciones } from '../interfaces/datos-concentrado.interface';
 import { DatosReporteInsumos } from '../interfaces/datos-reporte-insumos.interface';
@@ -56,7 +56,7 @@ export class PdfGeneratorService {
             try {
                 const doc = new PDFDocument({
                     size: 'A4',
-                    layout: 'landscape', // ✅ HORIZONTAL
+                    layout: 'landscape',
                     margins: { top: 30, bottom: 30, left: 30, right: 30 },
                     bufferPages: false,
                 });
@@ -376,6 +376,11 @@ export class PdfGeneratorService {
         const marginRight = 30;
         let currentY = 145;
 
+        // Colores definidos
+        const colorAzulResaltado = '#E6EEF8';
+        const colorAzulFinal = '#D9E6F2';
+        const colorGrisSupletorio = '#EAEAEA';
+
         // ============ TÍTULO "REPORTE DE CALIFICACIONES" ============
         const tituloTableHeight = 12;
         const tableWidth = pageWidth - marginLeft - marginRight;
@@ -523,20 +528,14 @@ export class PdfGeneratorService {
         todasMaterias.forEach(materiaNombre => {
             const rowHeight = 10;
             doc.rect(startX, currentY, colWidths.asignatura, rowHeight).stroke('#000');
-            doc.fontSize(5).font('Helvetica').text(materiaNombre, startX + 2, currentY + 2, { width: colWidths.asignatura - 4, ellipsis: true });
+            doc.fontSize(5).font('Helvetica').fillColor('#000').text(materiaNombre, startX + 2, currentY + 2, { width: colWidths.asignatura - 4, ellipsis: true });
 
-            xPos = startX + colWidths.asignatura;
+            let xPos = startX + colWidths.asignatura;
 
             for (let i = 1; i <= 3; i++) {
                 const mat = datos.trimestres.find(t => t.trimestre_numero === i)?.materias.find(m => m.materia_nombre === materiaNombre);
-                const vals = [
-                    mat?.promedio_insumos, mat?.ponderado_insumos, mat?.nota_proyecto,
-                    mat?.ponderado_proyecto, mat?.nota_examen, mat?.ponderado_examen, mat?.nota_final
-                ];
-                const widths = [
-                    microWidths.promedio, microWidths.ponderado70, microWidths.proyectoIntegrador,
-                    microWidths.ponderado15_1, microWidths.pruebaEstructurada, microWidths.ponderado15_2, microWidths.notaTotal
-                ];
+                const vals = [mat?.promedio_insumos, mat?.ponderado_insumos, mat?.nota_proyecto, mat?.ponderado_proyecto, mat?.nota_examen, mat?.ponderado_examen];
+                const widths = [microWidths.promedio, microWidths.ponderado70, microWidths.proyectoIntegrador, microWidths.ponderado15_1, microWidths.pruebaEstructurada, microWidths.ponderado15_2];
 
                 vals.forEach((v, idx) => {
                     doc.rect(xPos, currentY, widths[idx], rowHeight).stroke('#000');
@@ -544,50 +543,58 @@ export class PdfGeneratorService {
                     xPos += widths[idx];
                 });
 
-                doc.rect(xPos, currentY, microWidths.equivalencia, rowHeight).stroke('#000');
-                doc.text(mat?.cualitativa || '-', xPos, currentY + 2, { width: microWidths.equivalencia, align: 'center' });
+                // Resaltado AZUL CLARO para NOTA TOTAL y EQUIV
+                doc.rect(xPos, currentY, microWidths.notaTotal, rowHeight).fillAndStroke(colorAzulResaltado, '#000');
+                doc.fillColor('#000').text(mat?.nota_final ? mat.nota_final.toFixed(2) : '-', xPos, currentY + 2, { width: microWidths.notaTotal, align: 'center' });
+                xPos += microWidths.notaTotal;
+
+                doc.rect(xPos, currentY, microWidths.equivalencia, rowHeight).fillAndStroke(colorAzulResaltado, '#000');
+                doc.fillColor('#000').text(mat?.cualitativa || '-', xPos, currentY + 2, { width: microWidths.equivalencia, align: 'center' });
                 xPos += microWidths.equivalencia;
             }
 
             const promAnual = datos.promedios_anuales?.find(p => p.materia_nombre === materiaNombre);
 
-            // 1. Promedio Anual (3 Trimestres)
-            doc.rect(xPos, currentY, colWidths.promedioFinal3Trim, rowHeight).stroke('#000');
-            doc.text(promAnual ? promAnual.promedio_anual.toFixed(2) : '-', xPos, currentY + 2, { width: colWidths.promedioFinal3Trim, align: 'center' });
+            // Promedio Final (3 TRIM)
+            doc.rect(xPos, currentY, colWidths.promedioFinal3Trim, rowHeight).fillAndStroke(colorAzulFinal, '#000');
+            doc.fillColor('#000').text(promAnual ? promAnual.promedio_anual.toFixed(2) : '-', xPos, currentY + 2, { width: colWidths.promedioFinal3Trim, align: 'center' });
             xPos += colWidths.promedioFinal3Trim;
 
-            // 2. Supletorio
-            doc.rect(xPos, currentY, colWidths.califSupletorio, rowHeight).stroke('#000');
-            doc.text(promAnual?.nota_supletorio ? promAnual.nota_supletorio.toFixed(2) : '-', xPos, currentY + 2, { width: colWidths.califSupletorio, align: 'center' });
+            // Supletorio
+            doc.rect(xPos, currentY, colWidths.califSupletorio, rowHeight).fillAndStroke(colorGrisSupletorio, '#000');
+            doc.fillColor('#000').text(promAnual?.nota_supletorio ? promAnual.nota_supletorio.toFixed(2) : '-', xPos, currentY + 2, { width: colWidths.califSupletorio, align: 'center' });
             xPos += colWidths.califSupletorio;
 
-            // 3. Final Anual
-            doc.rect(xPos, currentY, colWidths.promedioFinalAnual, rowHeight).stroke('#000');
+            // Final Anual
+            doc.rect(xPos, currentY, colWidths.promedioFinalAnual, rowHeight).fillAndStroke(colorAzulFinal, '#000');
             const notaF = promAnual?.promedio_final ?? promAnual?.promedio_anual;
-            doc.text(notaF ? notaF.toFixed(2) : '-', xPos, currentY + 2, { width: colWidths.promedioFinalAnual, align: 'center' });
+            doc.fillColor('#000').text(notaF ? notaF.toFixed(2) : '-', xPos, currentY + 2, { width: colWidths.promedioFinalAnual, align: 'center' });
             xPos += colWidths.promedioFinalAnual;
 
-            // 4. Equivalencia Final
-            doc.rect(xPos, currentY, colWidths.equivalencia, rowHeight).stroke('#000');
-            doc.text(promAnual?.cualitativa_final || promAnual?.cualitativa || '-', xPos, currentY + 2, { width: colWidths.equivalencia, align: 'center' });
+            // Equivalencia Final
+            doc.rect(xPos, currentY, colWidths.equivalencia, rowHeight).fillAndStroke(colorAzulFinal, '#000');
+            doc.fillColor('#000').text(promAnual?.cualitativa_final || promAnual?.cualitativa || '-', xPos, currentY + 2, { width: colWidths.equivalencia, align: 'center' });
 
             currentY += rowHeight;
         });
 
-        // ============ FILA DE PROMEDIOS (CORREGIDO) ============
+        // ============ FILA DE PROMEDIOS ============
         const rowHeightProm = 10;
-        doc.rect(startX, currentY, finalTableWidth, rowHeightProm).fillOpacity(0.2).fill('#CCCCCC').fillOpacity(1).stroke('#000');
+        doc.rect(startX, currentY, colWidths.asignatura, rowHeightProm).fillAndStroke('#CCCCCC', '#000');
         doc.font('Helvetica-Bold').fillColor('#000').text('PROMEDIOS', startX + 2, currentY + 2);
 
         xPos = startX + colWidths.asignatura;
 
         for (let i = 1; i <= 3; i++) {
             const trim = datos.trimestres.find(t => t.trimestre_numero === i);
-            const totalMat = trim?.materias.length || 1;
+            const materiasConNota = trim?.materias.filter(m => (m.promedio_insumos || 0) > 0) || [];
+            const totalMat = materiasConNota.length;
 
             const drawAvg = (sum: number, w: number) => {
-                doc.rect(xPos, currentY, w, rowHeightProm).stroke();
-                doc.text((sum / totalMat).toFixed(2), xPos, currentY + 2, { width: w, align: 'center' });
+                doc.rect(xPos, currentY, w, rowHeightProm).stroke('#000');
+                const val = totalMat > 0 ? (sum / totalMat).toFixed(2) : '-';
+                // Aseguramos color negro para el texto
+                doc.fillColor('#000').text(val, xPos, currentY + 2, { width: w, align: 'center' });
                 xPos += w;
             };
 
@@ -598,38 +605,35 @@ export class PdfGeneratorService {
             drawAvg(trim?.materias.reduce((s, m) => s + (m.nota_examen || 0), 0) || 0, microWidths.pruebaEstructurada);
             drawAvg(trim?.materias.reduce((s, m) => s + (m.ponderado_examen || 0), 0) || 0, microWidths.ponderado15_2);
 
-            // Nota Total Trimestre
-            doc.rect(xPos, currentY, microWidths.notaTotal, rowHeightProm).stroke();
-            doc.text(trim?.promedio_general ? trim.promedio_general.toFixed(2) : '-', xPos, currentY + 2, { width: microWidths.notaTotal, align: 'center' });
+            // NOTA TOTAL TRIMESTRAL GENERAL
+            doc.rect(xPos, currentY, microWidths.notaTotal, rowHeightProm).fillAndStroke(colorAzulResaltado, '#000');
+            doc.fillColor('#000').text(totalMat > 0 && trim?.promedio_general ? trim.promedio_general.toFixed(2) : '-', xPos, currentY + 2, { width: microWidths.notaTotal, align: 'center' });
             xPos += microWidths.notaTotal;
 
-            // Equiv Trimestre
-            doc.rect(xPos, currentY, microWidths.equivalencia, rowHeightProm).stroke();
-            doc.text(trim?.cualitativa_general || '-', xPos, currentY + 2, { width: microWidths.equivalencia, align: 'center' });
+            // EQUIV TRIMESTRAL GENERAL (Aquí forzamos el color negro para que no se pierda con el azul)
+            doc.rect(xPos, currentY, microWidths.equivalencia, rowHeightProm).fillAndStroke(colorAzulResaltado, '#000');
+            doc.fillColor('#000').text(totalMat > 0 ? (trim?.cualitativa_general || '-') : '-', xPos, currentY + 2, { width: microWidths.equivalencia, align: 'center' });
             xPos += microWidths.equivalencia;
         }
 
-        // --- CAMBIO CLAVE AQUÍ: Separar las dos columnas de promedios finales ---
-
-        // 1. Promedio Final (3 TRIM) -> Ahora usa promedio_general_trimestres (Ej: 7.12)
-        doc.rect(xPos, currentY, colWidths.promedioFinal3Trim, rowHeightProm).stroke();
-        doc.text(datos.promedio_general_trimestres ? datos.promedio_general_trimestres.toFixed(2) : '-', xPos, currentY + 2, { width: colWidths.promedioFinal3Trim, align: 'center' });
+        // 1. Promedio Final (3 TRIM)
+        doc.rect(xPos, currentY, colWidths.promedioFinal3Trim, rowHeightProm).fillAndStroke(colorAzulFinal, '#000');
+        doc.fillColor('#000').text(datos.promedio_general_trimestres ? datos.promedio_general_trimestres.toFixed(2) : '-', xPos, currentY + 2, { width: colWidths.promedioFinal3Trim, align: 'center' });
         xPos += colWidths.promedioFinal3Trim;
 
-        // 2. Espacio de Supletorio (vacío)
-        doc.rect(xPos, currentY, colWidths.califSupletorio, rowHeightProm).stroke();
-        doc.text('-', xPos, currentY + 2, { width: colWidths.califSupletorio, align: 'center' });
+        // 2. Calif. Examen Supletorio
+        doc.rect(xPos, currentY, colWidths.califSupletorio, rowHeightProm).fillAndStroke(colorGrisSupletorio, '#000');
+        doc.fillColor('#000').text('-', xPos, currentY + 2, { width: colWidths.califSupletorio, align: 'center' });
         xPos += colWidths.califSupletorio;
 
-        // 3. Promedio Final Anual -> Usa promedio_general_anual (Ej: 7.17)
-        doc.rect(xPos, currentY, colWidths.promedioFinalAnual, rowHeightProm).stroke();
-        doc.text(datos.promedio_general_anual ? datos.promedio_general_anual.toFixed(2) : '-', xPos, currentY + 2, { width: colWidths.promedioFinalAnual, align: 'center' });
+        // 3. Promedio Final Anual
+        doc.rect(xPos, currentY, colWidths.promedioFinalAnual, rowHeightProm).fillAndStroke(colorAzulFinal, '#000');
+        doc.fillColor('#000').text(datos.promedio_general_anual ? datos.promedio_general_anual.toFixed(2) : '-', xPos, currentY + 2, { width: colWidths.promedioFinalAnual, align: 'center' });
         xPos += colWidths.promedioFinalAnual;
 
-        // 4. Equivalencia General
-        doc.rect(xPos, currentY, colWidths.equivalencia, rowHeightProm).stroke();
-        doc.text(datos.cualitativa_general_anual || '-', xPos, currentY + 2, { width: colWidths.equivalencia, align: 'center' });
-
+        // 4. EQUIVALENCIA FINAL
+        doc.rect(xPos, currentY, colWidths.equivalencia, rowHeightProm).fillAndStroke(colorAzulFinal, '#000');
+        doc.fillColor('#000').text(datos.cualitativa_general_anual || '-', xPos, currentY + 2, { width: colWidths.equivalencia, align: 'center' });
         currentY += rowHeightProm + 15;
 
         // Determinar si llamar a Básica o Bachillerato
@@ -680,7 +684,6 @@ export class PdfGeneratorService {
 
         currentY += rowHeight;
 
-        // ✅ Usar datos reales de comportamiento
         if (comportamiento) {
             const col1Width = 280;
             const calificacionWidth = 100;
@@ -1366,455 +1369,168 @@ export class PdfGeneratorService {
      */
     private dibujarTablaCalificacionesMateria(doc: PDFKit.PDFDocument, datos: DatosReporteMateria) {
         const pageWidth = doc.page.width;
-        const marginLeft = 30;
-        const marginRight = 30;
+        const marginBottom = 80;
         let currentY = doc.y;
 
-        // ============ DEFINIR ANCHOS DE COLUMNAS (OPTIMIZADO) ============
+        // --- COLORES ---
+        const colorCelesteEncabezado = '#AED6F1';
+        const colorAmarilloNotaFinal = '#F9E79F';
+        const colorRojoAlerta = '#E74C3C';
+        const colorFooterGris = '#E0E0E0';
+
+        // --- VARIABLES DINÁMICAS DE PORCENTAJE ---
+        const pctInsumos = datos.porcentajes.insumos || 0;
+        const pctProyecto = datos.porcentajes.proyecto || 0;
+        const pctExamen = datos.porcentajes.examen || 0;
+
         const colWidths = {
-            numero: 20,           // N°
-            nomina: 180,          // NÓMINA (ampliado de 150 a 180)
-            promedio: 38,         // PROMEDIO (ampliado de 35 a 38)
-            ponderado70: 38,      // 70% (ampliado de 35 a 38)
-            proyecto: 38,         // PROYECTO INTEGRADOR (ampliado)
-            ponderado15_1: 38,    // 15%
-            prueba: 38,           // PRUEBA ESTRUCTURADA (ampliado)
-            ponderado15_2: 38,    // 15%
-            notaTrimestre: 40,    // NOTA {TRIMESTRE} (ampliado)
-            cualitativa: 35       // CUALITATIVA
+            numero: 20,
+            nomina: 180,
+            promedio: 38,
+            ponderadoAportes: 38,
+            proyecto: 38,
+            ponderadoProyecto: 38,
+            prueba: 38,
+            ponderadoPrueba: 38,
+            notaTrimestre: 40,
+            cualitativa: 35
         };
 
         const tableWidth = Object.values(colWidths).reduce((sum, w) => sum + w, 0);
-        const startX = (pageWidth - tableWidth) / 2; // Centrar tabla
+        const startX = (pageWidth - tableWidth) / 2;
 
-        // ============ ALTURA DE ENCABEZADOS ============
-        const headerHeight1 = 12;  // Nivel 1: APORTES, SUMATIVA
-        const headerHeight2 = 40;  // Nivel 2: Texto rotado (ampliado de 35 a 40)
+        const headerHeight1 = 15;
+        const headerHeight2 = 45;
         const totalHeaderHeight = headerHeight1 + headerHeight2;
 
+        // --- FUNCIÓN AUXILIAR DE CELDA ---
+        const drawCell = (x: number, y: number, w: number, h: number, text: string, bgColor: string, isBold = false, align: 'center' | 'left' = 'center', forceRed = false) => {
+            doc.rect(x, y, w, h).fillAndStroke(bgColor, '#333');
+            doc.font(isBold ? 'Helvetica-Bold' : 'Helvetica')
+                .fontSize(7)
+                .fillColor(forceRed ? colorRojoAlerta : '#000')
+                .text(text || '', x + 2, y + (h / 2) - 3, { width: w - 4, align: align });
+            doc.fillColor('#000');
+        };
+
+        // ============ ENCABEZADO NIVEL 1 (AZUL) ============
         let xPos = startX;
-
-        // ============ ENCABEZADO NIVEL 1 ============
-        // N° (combina ambos niveles)
-        doc
-            .rect(xPos, currentY, colWidths.numero, totalHeaderHeight)
-            .stroke('#000');
-        doc
-            .fontSize(7)
-            .font('Helvetica-Bold')
-            .text('N°', xPos, currentY + (totalHeaderHeight / 2) - 3, {
-                width: colWidths.numero,
-                align: 'center'
-            });
+        drawCell(xPos, currentY, colWidths.numero, totalHeaderHeight, 'N°', colorCelesteEncabezado, true);
         xPos += colWidths.numero;
-
-        // NÓMINA (combina ambos niveles)
-        doc
-            .rect(xPos, currentY, colWidths.nomina, totalHeaderHeight)
-            .stroke('#000');
-        doc
-            .fontSize(7)
-            .font('Helvetica-Bold')
-            .text('NÓMINA', xPos, currentY + (totalHeaderHeight / 2) - 3, {
-                width: colWidths.nomina,
-                align: 'center'
-            });
+        drawCell(xPos, currentY, colWidths.nomina, totalHeaderHeight, 'NÓMINA', colorCelesteEncabezado, true);
         xPos += colWidths.nomina;
 
-        // APORTES (agrupa PROMEDIO + 70%)
-        const aportesWidth = colWidths.promedio + colWidths.ponderado70;
-        doc
-            .rect(xPos, currentY, aportesWidth, headerHeight1)
-            .stroke('#000');
-        doc
-            .fontSize(7)
-            .font('Helvetica-Bold')
-            .text('APORTES', xPos, currentY + 3, {
-                width: aportesWidth,
-                align: 'center'
-            });
-        xPos += aportesWidth;
+        const aportesWidth = colWidths.promedio + colWidths.ponderadoAportes;
+        drawCell(xPos, currentY, aportesWidth, headerHeight1, 'APORTES', colorCelesteEncabezado, true);
 
-        // SUMATIVA (agrupa PROYECTO + 15% + PRUEBA + 15%)
-        const sumativaWidth = colWidths.proyecto + colWidths.ponderado15_1 +
-            colWidths.prueba + colWidths.ponderado15_2;
-        doc
-            .rect(xPos, currentY, sumativaWidth, headerHeight1)
-            .stroke('#000');
-        doc
-            .fontSize(7)
-            .font('Helvetica-Bold')
-            .text('SUMATIVA', xPos, currentY + 3, {
-                width: sumativaWidth,
-                align: 'center'
-            });
-        xPos += sumativaWidth;
+        const sumativaWidth = colWidths.proyecto + colWidths.ponderadoProyecto + colWidths.prueba + colWidths.ponderadoPrueba;
+        drawCell(xPos + aportesWidth, currentY, sumativaWidth, headerHeight1, 'SUMATIVA', colorCelesteEncabezado, true);
 
-        // NOTA {TRIMESTRE} (combina ambos niveles, ROTADA)
-        const nombreTrimestreCorto = `NOTA ${datos.trimestre.nombre.toUpperCase()}`;
-        doc
-            .rect(xPos, currentY, colWidths.notaTrimestre, totalHeaderHeight)
-            .stroke('#000');
-        this.dibujarTextoRotado(doc, nombreTrimestreCorto, xPos, currentY, colWidths.notaTrimestre, totalHeaderHeight);
-        xPos += colWidths.notaTrimestre;
+        const xNotaFinal = xPos + aportesWidth + sumativaWidth;
+        drawCell(xNotaFinal, currentY, colWidths.notaTrimestre, totalHeaderHeight, '', colorCelesteEncabezado);
+        this.dibujarTextoRotado(doc, `NOTA ${datos.trimestre.nombre.toUpperCase()}`, xNotaFinal, currentY, colWidths.notaTrimestre, totalHeaderHeight);
 
-        // CUALITATIVA (combina ambos niveles, ROTADA)
-        doc
-            .rect(xPos, currentY, colWidths.cualitativa, totalHeaderHeight)
-            .stroke('#000');
-        this.dibujarTextoRotado(doc, 'CUALITATIVA', xPos, currentY, colWidths.cualitativa, totalHeaderHeight);
+        const xCual = xNotaFinal + colWidths.notaTrimestre;
+        drawCell(xCual, currentY, colWidths.cualitativa, totalHeaderHeight, '', colorCelesteEncabezado);
+        this.dibujarTextoRotado(doc, 'CUALITATIVA', xCual, currentY, colWidths.cualitativa, totalHeaderHeight);
 
         currentY += headerHeight1;
 
-        // ============ ENCABEZADO NIVEL 2: Micro-columnas con texto rotado ============
+        // ============ ENCABEZADO NIVEL 2 (AZUL) ============
         xPos = startX + colWidths.numero + colWidths.nomina;
+        const subs = [
+            { w: colWidths.promedio, t: 'PROMEDIO' },
+            { w: colWidths.ponderadoAportes, t: `${pctInsumos}%` },
+            { w: colWidths.proyecto, t: 'PROYECTO' },
+            { w: colWidths.ponderadoProyecto, t: `${pctProyecto}%` },
+            { w: colWidths.prueba, t: 'PRUEBA' },
+            { w: colWidths.ponderadoPrueba, t: `${pctExamen}%` }
+        ];
 
-        // APORTES: PROMEDIO | 70%
-        doc
-            .rect(xPos, currentY, colWidths.promedio, headerHeight2)
-            .stroke('#000');
-        this.dibujarTextoRotado(doc, 'PROMEDIO', xPos, currentY, colWidths.promedio, headerHeight2);
-        xPos += colWidths.promedio;
-
-        doc
-            .rect(xPos, currentY, colWidths.ponderado70, headerHeight2)
-            .stroke('#000');
-        this.dibujarTextoRotado(doc, '70%', xPos, currentY, colWidths.ponderado70, headerHeight2);
-        xPos += colWidths.ponderado70;
-
-        // SUMATIVA: PROYECTO INTEGRADOR | 15% | PRUEBA ESTRUCTURADA | 15%
-        doc
-            .rect(xPos, currentY, colWidths.proyecto, headerHeight2)
-            .stroke('#000');
-        this.dibujarTextoRotado(doc, 'PROYECTO INTEGRADOR', xPos, currentY, colWidths.proyecto, headerHeight2);
-        xPos += colWidths.proyecto;
-
-        doc
-            .rect(xPos, currentY, colWidths.ponderado15_1, headerHeight2)
-            .stroke('#000');
-        this.dibujarTextoRotado(doc, '15%', xPos, currentY, colWidths.ponderado15_1, headerHeight2);
-        xPos += colWidths.ponderado15_1;
-
-        doc
-            .rect(xPos, currentY, colWidths.prueba, headerHeight2)
-            .stroke('#000');
-        this.dibujarTextoRotado(doc, 'PRUEBA ESTRUCTURADA', xPos, currentY, colWidths.prueba, headerHeight2);
-        xPos += colWidths.prueba;
-
-        doc
-            .rect(xPos, currentY, colWidths.ponderado15_2, headerHeight2)
-            .stroke('#000');
-        this.dibujarTextoRotado(doc, '15%', xPos, currentY, colWidths.ponderado15_2, headerHeight2);
+        subs.forEach(s => {
+            drawCell(xPos, currentY, s.w, headerHeight2, '', colorCelesteEncabezado);
+            this.dibujarTextoRotado(doc, s.t, xPos, currentY, s.w, headerHeight2);
+            xPos += s.w;
+        });
 
         currentY += headerHeight2;
 
         // ============ FILAS DE ESTUDIANTES ============
-        const rowHeight = 10;
-        doc.fontSize(6).font('Helvetica');
-
+        const rowHeight = 12;
         datos.calificaciones.forEach((cal, index) => {
+            if (currentY + rowHeight > doc.page.height - marginBottom) {
+                doc.addPage();
+                currentY = 50;
+                // Nota: Aquí se podría re-dibujar el encabezado si el reporte es muy largo
+            }
+
             xPos = startX;
+            const rowBg = index % 2 === 0 ? '#FFFFFF' : '#F9F9F9';
 
-            // N°
-            doc
-                .rect(xPos, currentY, colWidths.numero, rowHeight)
-                .stroke('#000');
-            doc
-                .fillColor('#000')
-                .text((index + 1).toString(), xPos, currentY + 3, {
-                    width: colWidths.numero,
-                    align: 'center'
-                });
+            drawCell(xPos, currentY, colWidths.numero, rowHeight, (index + 1).toString(), rowBg);
             xPos += colWidths.numero;
-
-            // NÓMINA
-            doc
-                .rect(xPos, currentY, colWidths.nomina, rowHeight)
-                .stroke('#000');
-            doc
-                .font('Helvetica')
-                .fillColor('#000')
-                .text(cal.estudiante_nombre, xPos + 2, currentY + 3, {
-                    width: colWidths.nomina - 4,
-                    ellipsis: true,
-                    lineBreak: false
-                });
+            drawCell(xPos, currentY, colWidths.nomina, rowHeight, cal.estudiante_nombre, rowBg, false, 'left');
             xPos += colWidths.nomina;
 
-            // ✅ PROMEDIO INSUMOS (rojo si < 7)
-            doc
-                .rect(xPos, currentY, colWidths.promedio, rowHeight)
-                .stroke('#000');
-            const colorPromedio = (cal.promedio_insumos !== null && cal.promedio_insumos < 7) ? '#FF0000' : '#000';
-            doc
-                .font('Helvetica-Bold')
-                .fillColor(colorPromedio)
-                .text(
-                    cal.promedio_insumos !== null ? cal.promedio_insumos.toFixed(2) : '-',
-                    xPos,
-                    currentY + 3,
-                    { width: colWidths.promedio, align: 'center' }
-                );
+            // Notas intermedias
+            drawCell(xPos, currentY, colWidths.promedio, rowHeight, cal.promedio_insumos?.toFixed(2) || '-', rowBg);
             xPos += colWidths.promedio;
-
-            // PONDERADO 70% INSUMOS
-            doc
-                .rect(xPos, currentY, colWidths.ponderado70, rowHeight)
-                .stroke('#000');
-            doc
-                .fillColor('#000')
-                .text(
-                    cal.ponderado_insumos !== null ? cal.ponderado_insumos.toFixed(2) : '-',
-                    xPos,
-                    currentY + 3,
-                    { width: colWidths.ponderado70, align: 'center' }
-                );
-            xPos += colWidths.ponderado70;
-
-            // ✅ PROYECTO (rojo si < 7)
-            doc
-                .rect(xPos, currentY, colWidths.proyecto, rowHeight)
-                .stroke('#000');
-            const colorProyecto = (cal.nota_proyecto !== null && cal.nota_proyecto < 7) ? '#FF0000' : '#000';
-            doc
-                .fillColor(colorProyecto)
-                .text(
-                    cal.nota_proyecto !== null ? cal.nota_proyecto.toFixed(2) : '-',
-                    xPos,
-                    currentY + 3,
-                    { width: colWidths.proyecto, align: 'center' }
-                );
+            drawCell(xPos, currentY, colWidths.ponderadoAportes, rowHeight, cal.ponderado_insumos?.toFixed(2) || '-', rowBg);
+            xPos += colWidths.ponderadoAportes;
+            drawCell(xPos, currentY, colWidths.proyecto, rowHeight, cal.nota_proyecto?.toFixed(2) || '-', rowBg);
             xPos += colWidths.proyecto;
-
-            // PONDERADO 15% PROYECTO
-            doc
-                .rect(xPos, currentY, colWidths.ponderado15_1, rowHeight)
-                .stroke('#000');
-            doc
-                .fillColor('#000')
-                .text(
-                    cal.ponderado_proyecto !== null ? cal.ponderado_proyecto.toFixed(2) : '-',
-                    xPos,
-                    currentY + 3,
-                    { width: colWidths.ponderado15_1, align: 'center' }
-                );
-            xPos += colWidths.ponderado15_1;
-
-            // ✅ EXAMEN (rojo si < 7)
-            doc
-                .rect(xPos, currentY, colWidths.prueba, rowHeight)
-                .stroke('#000');
-            const colorExamen = (cal.nota_examen !== null && cal.nota_examen < 7) ? '#FF0000' : '#000';
-            doc
-                .fillColor(colorExamen)
-                .text(
-                    cal.nota_examen !== null ? cal.nota_examen.toFixed(2) : '-',
-                    xPos,
-                    currentY + 3,
-                    { width: colWidths.prueba, align: 'center' }
-                );
+            drawCell(xPos, currentY, colWidths.ponderadoProyecto, rowHeight, cal.ponderado_proyecto?.toFixed(2) || '-', rowBg);
+            xPos += colWidths.ponderadoProyecto;
+            drawCell(xPos, currentY, colWidths.prueba, rowHeight, cal.nota_examen?.toFixed(2) || '-', rowBg);
             xPos += colWidths.prueba;
+            drawCell(xPos, currentY, colWidths.ponderadoPrueba, rowHeight, cal.ponderado_examen?.toFixed(2) || '-', rowBg);
+            xPos += colWidths.ponderadoPrueba;
 
-            // PONDERADO 15% EXAMEN
-            doc
-                .rect(xPos, currentY, colWidths.ponderado15_2, rowHeight)
-                .stroke('#000');
-            doc
-                .fillColor('#000')
-                .text(
-                    cal.ponderado_examen !== null ? cal.ponderado_examen.toFixed(2) : '-',
-                    xPos,
-                    currentY + 3,
-                    { width: colWidths.ponderado15_2, align: 'center' }
-                );
-            xPos += colWidths.ponderado15_2;
-
-            // ✅ NOTA FINAL (rojo si < 7)
-            doc
-                .rect(xPos, currentY, colWidths.notaTrimestre, rowHeight)
-                .stroke('#000');
-            const colorFinal = cal.nota_final < 7 ? '#FF0000' : '#000';
-            doc
-                .fillColor(colorFinal)
-                .text(
-                    cal.nota_final.toFixed(2),
-                    xPos,
-                    currentY + 3,
-                    { width: colWidths.notaTrimestre, align: 'center' }
-                );
+            // ✅ COLUMNA AMARILLA: NOTA TRIMESTRE (Rojo si < 7)
+            drawCell(xPos, currentY, colWidths.notaTrimestre, rowHeight, cal.nota_final.toFixed(2), colorAmarilloNotaFinal, true, 'center', cal.nota_final < 7);
             xPos += colWidths.notaTrimestre;
 
-            // CUALITATIVA
-            doc
-                .rect(xPos, currentY, colWidths.cualitativa, rowHeight)
-                .stroke('#000');
-            doc
-                .fillColor('#000')
-                .text(
-                    cal.cualitativa,
-                    xPos,
-                    currentY + 3,
-                    { width: colWidths.cualitativa, align: 'center' }
-                );
-
+            drawCell(xPos, currentY, colWidths.cualitativa, rowHeight, cal.cualitativa, rowBg);
             currentY += rowHeight;
         });
 
-        // ============ FASE 3: FILA DE PROMEDIOS ============
-        currentY += 3; // Pequeño espacio
-
+        // ============ FILA DE PROMEDIOS (FOOTER) ============
         xPos = startX;
+        drawCell(xPos, currentY, colWidths.numero + colWidths.nomina, rowHeight, 'PROMEDIOS GENERALES', colorFooterGris, true, 'left');
+        xPos += colWidths.numero + colWidths.nomina;
 
-        // N° (vacía)
-        doc
-            .rect(xPos, currentY, colWidths.numero, rowHeight)
-            .fillOpacity(0.15)
-            .fill('#CCCCCC')
-            .fillOpacity(1)
-            .stroke('#000');
-        xPos += colWidths.numero;
-
-        // NÓMINA con texto "PROMEDIOS"
-        doc
-            .rect(xPos, currentY, colWidths.nomina, rowHeight)
-            .fillOpacity(0.15)
-            .fill('#CCCCCC')
-            .fillOpacity(1)
-            .stroke('#000');
-        doc
-            .fontSize(7)
-            .font('Helvetica-Bold')
-            .fillColor('#000')
-            .text('PROMEDIOS', xPos + 2, currentY + 3, {
-                width: colWidths.nomina - 4,
-                align: 'left'
-            });
-        xPos += colWidths.nomina;
-
-        // Calcular promedios
-        const calcularPromedio = (campo: keyof typeof datos.calificaciones[0]): number => {
-            const valores = datos.calificaciones
-                .map(c => c[campo] as number | null)
-                .filter(v => v !== null && v !== undefined) as number[];
-
-            if (valores.length === 0) return 0;
-            return valores.reduce((sum, v) => sum + v, 0) / valores.length;
+        const getAvg = (key: keyof typeof datos.calificaciones[0]) => {
+            const vals = datos.calificaciones.map(c => c[key] as number).filter(v => v !== null && v !== undefined);
+            return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
         };
 
-        // ✅ PROMEDIO INSUMOS (con valor calculado)
-        const promedioInsumos = calcularPromedio('promedio_insumos');
-        doc
-            .rect(xPos, currentY, colWidths.promedio, rowHeight)
-            .fillOpacity(0.15)
-            .fill('#CCCCCC')
-            .fillOpacity(1)
-            .stroke('#000');
-        doc
-            .fontSize(6)
-            .font('Helvetica-Bold')
-            .fillColor('#000')
-            .text(promedioInsumos.toFixed(2), xPos, currentY + 3, {
-                width: colWidths.promedio,
-                align: 'center'
-            });
-        xPos += colWidths.promedio;
+        // Estructura para el footer: [campo, ancho, esPonderado]
+        const footerConfig: [keyof CalificacionEstudianteMateria, number, boolean][] = [
+            ['promedio_insumos', colWidths.promedio, false],
+            ['ponderado_insumos', colWidths.ponderadoAportes, true],
+            ['nota_proyecto', colWidths.proyecto, false],
+            ['ponderado_proyecto', colWidths.ponderadoProyecto, true],
+            ['nota_examen', colWidths.prueba, false],
+            ['ponderado_examen', colWidths.ponderadoPrueba, true]
+        ];
 
-        // ❌ PONDERADO 70% (VACÍA - sin promedio)
-        doc
-            .rect(xPos, currentY, colWidths.ponderado70, rowHeight)
-            .fillOpacity(0.15)
-            .fill('#CCCCCC')
-            .fillOpacity(1)
-            .stroke('#000');
-        xPos += colWidths.ponderado70;
+        footerConfig.forEach(([campo, ancho, esPonderado]) => {
+            if (esPonderado) {
+                drawCell(xPos, currentY, ancho, rowHeight, '', colorFooterGris);
+            } else {
+                const avg = getAvg(campo);
+                drawCell(xPos, currentY, ancho, rowHeight, avg.toFixed(2), colorFooterGris, true, 'center', avg < 7);
+            }
+            xPos += ancho;
+        });
 
-        // ✅ PROYECTO INTEGRADOR (con valor calculado)
-        const promedioProyecto = calcularPromedio('nota_proyecto');
-        doc
-            .rect(xPos, currentY, colWidths.proyecto, rowHeight)
-            .fillOpacity(0.15)
-            .fill('#CCCCCC')
-            .fillOpacity(1)
-            .stroke('#000');
-        doc
-            .fontSize(6)
-            .font('Helvetica-Bold')
-            .fillColor('#000')
-            .text(promedioProyecto.toFixed(2), xPos, currentY + 3, {
-                width: colWidths.proyecto,
-                align: 'center'
-            });
-        xPos += colWidths.proyecto;
-
-        // ❌ PONDERADO 15% PROYECTO (VACÍA - sin promedio)
-        doc
-            .rect(xPos, currentY, colWidths.ponderado15_1, rowHeight)
-            .fillOpacity(0.15)
-            .fill('#CCCCCC')
-            .fillOpacity(1)
-            .stroke('#000');
-        xPos += colWidths.ponderado15_1;
-
-        // ✅ PRUEBA ESTRUCTURADA (con valor calculado)
-        const promedioExamen = calcularPromedio('nota_examen');
-        doc
-            .rect(xPos, currentY, colWidths.prueba, rowHeight)
-            .fillOpacity(0.15)
-            .fill('#CCCCCC')
-            .fillOpacity(1)
-            .stroke('#000');
-        doc
-            .fontSize(6)
-            .font('Helvetica-Bold')
-            .fillColor('#000')
-            .text(promedioExamen.toFixed(2), xPos, currentY + 3, {
-                width: colWidths.prueba,
-                align: 'center'
-            });
-        xPos += colWidths.prueba;
-
-        // ❌ PONDERADO 15% EXAMEN (VACÍA - sin promedio)
-        doc
-            .rect(xPos, currentY, colWidths.ponderado15_2, rowHeight)
-            .fillOpacity(0.15)
-            .fill('#CCCCCC')
-            .fillOpacity(1)
-            .stroke('#000');
-        xPos += colWidths.ponderado15_2;
-
-        // ✅ NOTA {TRIMESTRE} (con valor calculado)
-        const promedioFinal = calcularPromedio('nota_final');
-        doc
-            .rect(xPos, currentY, colWidths.notaTrimestre, rowHeight)
-            .fillOpacity(0.15)
-            .fill('#CCCCCC')
-            .fillOpacity(1)
-            .stroke('#000');
-        doc
-            .fontSize(6)
-            .font('Helvetica-Bold')
-            .fillColor('#000')
-            .text(promedioFinal.toFixed(2), xPos, currentY + 3, {
-                width: colWidths.notaTrimestre,
-                align: 'center'
-            });
+        const avgFinal = getAvg('nota_final');
+        drawCell(xPos, currentY, colWidths.notaTrimestre, rowHeight, avgFinal.toFixed(2), colorAmarilloNotaFinal, true, 'center', avgFinal < 7);
         xPos += colWidths.notaTrimestre;
 
-        // CUALITATIVA (vacía)
-        doc
-            .rect(xPos, currentY, colWidths.cualitativa, rowHeight)
-            .fillOpacity(0.15)
-            .fill('#CCCCCC')
-            .fillOpacity(1)
-            .stroke('#000');
+        drawCell(xPos, currentY, colWidths.cualitativa, rowHeight, '', colorFooterGris);
 
-        currentY += rowHeight;
-
-        // Guardar posición para la siguiente fase
-        doc.y = currentY + 10;
-
-        // Resetear color
-        doc.fillColor('#000');
+        doc.y = currentY + 20;
     }
 
     /**
@@ -2614,8 +2330,14 @@ export class PdfGeneratorService {
         const pageWidth = doc.page.width;
         const marginLeft = 30;
         const marginRight = 30;
-        const marginBottom = 80; // Espacio para firmas/gráficos abajo
+        const marginBottom = 80;
         let currentY = doc.y;
+
+        // Colores personalizados
+        const colorCelesteEncabezado = '#AED6F1';
+        const colorAmarilloPromedio = '#F9E79F';
+        const colorRojoAlerta = '#E74C3C';
+        const colorFooterVerde = '#ABEBC6';
 
         const numInsumos = datos.insumos_orden.length;
         const numeroWidth = 25;
@@ -2631,45 +2353,43 @@ export class PdfGeneratorService {
         const headerHeight = 60;
         const rowHeight = 16;
 
-        // --- FUNCIÓN AUXILIAR DE CELDA (LA CLAVE DEL ÉXITO) ---
-        const drawInsumoCell = (x: number, y: number, w: number, h: number, text: string, bgColor: string, isBold = false, align: 'center' | 'left' = 'center') => {
-            doc.rect(x, y, w, h).fillAndStroke(bgColor, '#333'); // Borde gris oscuro suave
+        // --- FUNCIÓN AUXILIAR DE CELDA ---
+        const drawInsumoCell = (x: number, y: number, w: number, h: number, text: string, bgColor: string, isBold = false, align: 'center' | 'left' = 'center', forceRed = false) => {
+            doc.rect(x, y, w, h).fillAndStroke(bgColor, '#333');
+
             doc.font(isBold ? 'Helvetica-Bold' : 'Helvetica')
                 .fontSize(7)
-                .fillColor('#000') // <--- Forzamos negro en cada celda
+                .fillColor(forceRed ? colorRojoAlerta : '#000')
                 .text(text || '', x + 2, y + (h / 2) - 3, { width: w - 4, align: align });
+
+            doc.fillColor('#000'); // Siempre reseteamos a negro
         };
 
-        // --- FUNCIÓN PARA ENCABEZADOS (Para saltos de página) ---
+        // --- FUNCIÓN PARA ENCABEZADOS ---
         const imprimirEncabezadosInsumos = (y: number) => {
             let xP = startX;
-            // Encabezados estáticos
-            drawInsumoCell(xP, y, numeroWidth, headerHeight, 'N°', '#E0E0E0', true);
+            drawInsumoCell(xP, y, numeroWidth, headerHeight, 'N°', colorCelesteEncabezado, true);
             xP += numeroWidth;
-            drawInsumoCell(xP, y, nombreWidth, headerHeight, 'NÓMINA', '#E0E0E0', true);
+            drawInsumoCell(xP, y, nombreWidth, headerHeight, 'NÓMINA', colorCelesteEncabezado, true);
             xP += nombreWidth;
 
-            // Insumos rotados
-            datos.insumos_orden.forEach((insumo, index) => {
-                const color = index % 2 === 0 ? '#D6EAF8' : '#FCF3CF';
-                doc.rect(xP, y, insumoWidth, headerHeight).fillAndStroke(color, '#333');
+            datos.insumos_orden.forEach((insumo) => {
+                doc.rect(xP, y, insumoWidth, headerHeight).fillAndStroke(colorCelesteEncabezado, '#333');
                 this.dibujarTextoRotado(doc, insumo.toUpperCase(), xP, y, insumoWidth, headerHeight);
                 xP += insumoWidth;
             });
 
-            // Promedio y Cualitativa
-            drawInsumoCell(xP, y, promedioWidth, headerHeight, 'PROM', '#E0E0E0', true);
+            drawInsumoCell(xP, y, promedioWidth, headerHeight, 'PROM', colorAmarilloPromedio, true);
             xP += promedioWidth;
-            drawInsumoCell(xP, y, cualitativaWidth, headerHeight, 'CUAL', '#E0E0E0', true);
+            drawInsumoCell(xP, y, cualitativaWidth, headerHeight, 'CUAL', colorCelesteEncabezado, true);
 
             return y + headerHeight;
         };
 
-        // ============ RENDERIZADO DE TABLA ============
+        // ============ RENDERIZADO DE FILAS ============
         currentY = imprimirEncabezadosInsumos(currentY);
 
         datos.estudiantes.forEach((estudiante, index) => {
-            // Control de Salto de Página
             if (currentY + rowHeight > doc.page.height - marginBottom) {
                 doc.addPage({ size: 'A4', layout: 'portrait', margins: { top: 30, bottom: 30, left: 30, right: 30 } });
                 currentY = 50;
@@ -2685,23 +2405,25 @@ export class PdfGeneratorService {
             drawInsumoCell(xPos, currentY, nombreWidth, rowHeight, estudiante.estudiante_nombre, rowBg, false, 'left');
             xPos += nombreWidth;
 
-            // Notas Insumos
-            estudiante.calificaciones_insumos.forEach((cal, idx) => {
-                const cellColor = idx % 2 === 0 ? '#EBF5FB' : '#FEF9E7';
+            // Notas Insumos (SIEMPRE EN NEGRO según lo pedido)
+            estudiante.calificaciones_insumos.forEach((cal) => {
                 const notaTexto = cal.nota !== null ? cal.nota.toFixed(2) : '-';
-                drawInsumoCell(xPos, currentY, insumoWidth, rowHeight, notaTexto, cellColor);
+                drawInsumoCell(xPos, currentY, insumoWidth, rowHeight, notaTexto, rowBg, false, 'center', false);
                 xPos += insumoWidth;
             });
 
-            // Promedio y Cualitativa del Estudiante
-            drawInsumoCell(xPos, currentY, promedioWidth, rowHeight, estudiante.promedio_insumos.toFixed(2), rowBg, true);
+            // PROMEDIO ESTUDIANTE (Amarillo + Validación Rojo)
+            const promBajo = estudiante.promedio_insumos < 7;
+            drawInsumoCell(xPos, currentY, promedioWidth, rowHeight, estudiante.promedio_insumos.toFixed(2), colorAmarilloPromedio, true, 'center', promBajo);
             xPos += promedioWidth;
+
+            // Cualitativa
             drawInsumoCell(xPos, currentY, cualitativaWidth, rowHeight, estudiante.cualitativa, rowBg);
 
             currentY += rowHeight;
         });
 
-        // ============ FILA DE PROMEDIOS FINALES ============
+        // ============ FILA DE PROMEDIOS GENERALES ============
         if (currentY + rowHeight > doc.page.height - marginBottom) {
             doc.addPage();
             currentY = 50;
@@ -2709,39 +2431,37 @@ export class PdfGeneratorService {
         }
 
         let xFinal = startX;
-        const footerColor = '#ABEBC6';
 
-        // Etiqueta Promedios
-        drawInsumoCell(xFinal, currentY, numeroWidth + nombreWidth, rowHeight, 'PROMEDIOS', footerColor, true, 'left');
+        // Etiqueta PROMEDIOS
+        drawInsumoCell(xFinal, currentY, numeroWidth + nombreWidth, rowHeight, 'PROMEDIOS', colorFooterVerde, true, 'left');
         xFinal += (numeroWidth + nombreWidth);
 
-        // Totales por cada Insumo
-        datos.promedios_por_insumo.forEach((promedio, idx) => {
-            const color = idx % 2 === 0 ? '#A9DFBF' : '#F9E79F';
+        // Totales por cada Insumo (Validación Rojo)
+        datos.promedios_por_insumo.forEach((promedio) => {
             const promTexto = promedio > 0 ? promedio.toFixed(2) : '-';
-            drawInsumoCell(xFinal, currentY, insumoWidth, rowHeight, promTexto, color, true);
+            const esBajoTotal = promedio > 0 && promedio < 7;
+            drawInsumoCell(xFinal, currentY, insumoWidth, rowHeight, promTexto, colorFooterVerde, true, 'center', esBajoTotal);
             xFinal += insumoWidth;
         });
 
-        // Final de Fila
-        drawInsumoCell(xFinal, currentY, promedioWidth, rowHeight, datos.promedio_general_curso.toFixed(2), footerColor, true);
+        // PROMEDIO GENERAL (Amarillo + Validación Rojo)
+        const genBajo = datos.promedio_general_curso < 7;
+        drawInsumoCell(xFinal, currentY, promedioWidth, rowHeight, datos.promedio_general_curso.toFixed(2), colorAmarilloPromedio, true, 'center', genBajo);
         xFinal += promedioWidth;
-        drawInsumoCell(xFinal, currentY, cualitativaWidth, rowHeight, datos.cualitativa_general_curso, footerColor, true);
+        drawInsumoCell(xFinal, currentY, cualitativaWidth, rowHeight, datos.cualitativa_general_curso, colorFooterVerde, true);
 
         currentY += rowHeight + 20;
-        doc.y = currentY; // Actualizamos la posición global de PDFKit
+        doc.y = currentY;
     }
 
     private dibujarRendimientoYEscalaInsumos(doc: PDFKit.PDFDocument, datos: DatosReporteInsumos) {
-        // Usar la misma lógica que dibujarRendimientoYEscala pero con datos de insumos
         this.dibujarRendimientoYEscala(doc, {
             ...datos,
-            calificaciones: [] // No se usa en este contexto
+            calificaciones: []
         } as any);
     }
 
     private dibujarFirmaDocenteInsumos(doc: PDFKit.PDFDocument, datos: DatosReporteInsumos) {
-        // Usar la misma lógica que dibujarFirmaDocente
         this.dibujarFirmaDocente(doc, datos as any);
     }
 
