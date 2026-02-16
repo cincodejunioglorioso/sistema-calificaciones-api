@@ -2,7 +2,7 @@
 
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { EstadoPromedioAnual, PromedioPeriodo } from './entities/promedio-periodo.entity';
 import { CreatePromedioPeriodoDto } from './dto/create-promedio-periodo.dto';
 import { UpdatePromedioPeriodoDto } from './dto/update-promedio-periodo.dto';
@@ -11,10 +11,12 @@ import { PromedioTrimestre } from '../promedio-trimestre/entities/promedio-trime
 import { Matricula, EstadoMatricula } from '../matriculas/entities/matricula.entity';
 import { MateriaCurso } from '../materia-curso/entities/materia-curso.entity';
 import { PeriodoLectivo, EstadoPeriodo, EstadoSupletorio } from '../periodos-lectivos/entities/periodos-lectivo.entity';
-import { Trimestre, TrimestreEstado } from '../trimestres/entities/trimestre.entity';
+import { NombreTrimestre, Trimestre, TrimestreEstado } from '../trimestres/entities/trimestre.entity';
 import { calcularConversionCualitativa } from '../common/constants/escalas.constants';
 import { ResultadoGeneracionPeriodoMasiva } from './dto/resultado-generacion-masiva.interface';
 import { ConversionCualitativa } from '../common/enums/cualitativa.enum';
+import { EstadoEstudiante } from '../estudiantes/entities/estudiante.entity';
+import { TipoCalificacion } from '../materias/entities/materia.entity';
 
 @Injectable()
 export class PromedioPeriodoService {
@@ -161,10 +163,12 @@ export class PromedioPeriodoService {
   }
 
   /**
-   * 👑 ADMIN: Generar promedios anuales masivos para todo un período lectivo
-   * Se ejecuta al finalizar el período lectivo (después de cerrar el trimestre 3)
+   * 🚀 OPTIMIZADO: Generar promedios anuales masivos para todo un período lectivo
+   * Reduce 7,000+ queries → ~8 queries
    */
   async generarPromediosMasivo(periodo_lectivo_id: string): Promise<ResultadoGeneracionPeriodoMasiva> {
+    const startTime = Date.now();
+
     const periodoLectivo = await this.periodoLectivoRepository.findOne({
       where: { id: periodo_lectivo_id }
     });
@@ -173,6 +177,7 @@ export class PromedioPeriodoService {
       throw new NotFoundException('Período lectivo no encontrado');
     }
 
+    // 🔥 OPTIMIZACIÓN 1: Obtener trimestres UNA VEZ
     const trimestres = await this.trimestreRepository.find({
       where: { periodo_lectivo_id },
       order: { nombre: 'ASC' }
@@ -189,6 +194,7 @@ export class PromedioPeriodoService {
         `No se pueden generar promedios anuales: los trimestres ${trimestresNoFinalizados.map(t => t.nombre).join(', ')} no están finalizados`
       );
     }
+
     const resultado: ResultadoGeneracionPeriodoMasiva = {
       total_procesados: 0,
       total_generados: 0,
@@ -196,6 +202,7 @@ export class PromedioPeriodoService {
       estudiantes_incompletos: []
     };
 
+    // 🔥 OPTIMIZACIÓN 2: Obtener todas las materias-curso de una vez
     const materiasCurso = await this.materiaCursoRepository.find({
       where: {
         curso: { periodo_lectivo_id }
@@ -203,38 +210,161 @@ export class PromedioPeriodoService {
       relations: ['curso', 'materia']
     });
 
-    for (const materiaCurso of materiasCurso) {
-      const matriculas = await this.matriculaRepository.find({
-        where: {
-          curso_id: materiaCurso.curso_id,
-          estado: EstadoMatricula.ACTIVO
-        },
-        relations: ['estudiante']
-      });
+    // Filtrar solo materias cuantitativas
+    const materiasCuantitativas = materiasCurso.filter(
+      mc => mc.materia.tipoCalificacion === TipoCalificacion.CUANTITATIVA
+    );
 
-      for (const matricula of matriculas) {
+    if (materiasCuantitativas.length === 0) {
+      return resultado;
+    }
+
+    // 🔥 OPTIMIZACIÓN 3: Obtener IDs de todos los cursos
+    const cursosIds = [...new Set(materiasCuantitativas.map(mc => mc.curso_id))];
+
+    // 🔥 OPTIMIZACIÓN 4: Batch query - Todas las matrículas activas
+    const matriculas = await this.matriculaRepository.find({
+      where: {
+        curso_id: In(cursosIds),
+        estado: EstadoMatricula.ACTIVO
+      },
+      relations: ['estudiante']
+    });
+
+    const matriculasActivas = matriculas.filter(
+      m => m.estudiante.estado !== EstadoEstudiante.INACTIVO_TEMPORAL
+    );
+
+    if (matriculasActivas.length === 0) {
+      return resultado;
+    }
+
+    // 🔥 OPTIMIZACIÓN 5: Batch query - Promedios anuales ya existentes
+    const materiasIds = materiasCuantitativas.map(mc => mc.id);
+    const estudiantesIds = matriculasActivas.map(m => m.estudiante_id);
+
+    const promediosExistentes = await this.promedioPeriodoRepository.find({
+      where: {
+        materia_curso_id: In(materiasIds),
+        estudiante_id: In(estudiantesIds),
+        periodo_lectivo_id
+      },
+      select: ['estudiante_id', 'materia_curso_id']
+    });
+
+    const yaExistenSet = new Set(
+      promediosExistentes.map(p => `${p.estudiante_id}:${p.materia_curso_id}`)
+    );
+
+    // 🔥 OPTIMIZACIÓN 6: Batch query - TODOS los promedios trimestrales de los 3 trimestres
+    const trimestresIds = trimestres.map(t => t.id);
+
+    const todosPromediosTrimestrales = await this.promedioTrimestreRepository.find({
+      where: {
+        estudiante_id: In(estudiantesIds),
+        materia_curso_id: In(materiasIds),
+        trimestre_id: In(trimestresIds)
+      },
+      select: ['estudiante_id', 'materia_curso_id', 'trimestre_id', 'nota_final_trimestre']
+    });
+
+    // 🔥 OPTIMIZACIÓN 7: Crear Maps para acceso O(1)
+    // Estructura: Map<"estudiante_id:materia_id", { t1, t2, t3 }>
+    const promediosTrimestralesMap = new Map<string, {
+      t1: number | null;
+      t2: number | null;
+      t3: number | null;
+    }>();
+
+    todosPromediosTrimestrales.forEach(pt => {
+      const key = `${pt.estudiante_id}:${pt.materia_curso_id}`;
+
+      if (!promediosTrimestralesMap.has(key)) {
+        promediosTrimestralesMap.set(key, { t1: null, t2: null, t3: null });
+      }
+
+      const registro = promediosTrimestralesMap.get(key)!;
+
+      // Identificar trimestre por ID
+      if (pt.trimestre_id === trimestres[0].id) {
+        registro.t1 = Number(pt.nota_final_trimestre);
+      } else if (pt.trimestre_id === trimestres[1].id) {
+        registro.t2 = Number(pt.nota_final_trimestre);
+      } else if (pt.trimestre_id === trimestres[2].id) {
+        registro.t3 = Number(pt.nota_final_trimestre);
+      }
+    });
+
+    // 🔥 OPTIMIZACIÓN 8: Procesar en memoria y guardar en batch
+    const promediosACrear: PromedioPeriodo[] = [];
+    const BATCH_SIZE = 100;
+
+    for (const materiaCurso of materiasCuantitativas) {
+      const matriculasDelCurso = matriculasActivas.filter(m => m.curso_id === materiaCurso.curso_id);
+
+      for (const matricula of matriculasDelCurso) {
         resultado.total_procesados++;
 
-        try {
-          const existente = await this.promedioPeriodoRepository.findOne({
-            where: {
-              estudiante_id: matricula.estudiante_id,
-              materia_curso_id: materiaCurso.id,
-              periodo_lectivo_id
-            }
-          });
+        const key = `${matricula.estudiante_id}:${materiaCurso.id}`;
 
-          if (existente) {
-            continue;
+        // Skip si ya existe
+        if (yaExistenSet.has(key)) {
+          continue;
+        }
+
+        try {
+          // Obtener promedios trimestrales desde el Map
+          const promediosTrimestre = promediosTrimestralesMap.get(key);
+
+          if (!promediosTrimestre) {
+            throw new Error('No tiene promedios trimestrales');
           }
 
-          await this.create({
+          const { t1, t2, t3 } = promediosTrimestre;
+
+          if (t1 === null || t2 === null || t3 === null) {
+            const faltantes: string[] = [];
+            if (t1 === null) faltantes.push(trimestres[0].nombre);
+            if (t2 === null) faltantes.push(trimestres[1].nombre);
+            if (t3 === null) faltantes.push(trimestres[2].nombre);
+            throw new Error(`Faltan promedios trimestrales: ${faltantes.join(', ')}`);
+          }
+
+          // Calcular promedio anual
+          const sumaTrimestres = t1 + t2 + t3;
+          const promedio_anual = Math.round((sumaTrimestres / 3) * 100) / 100;
+          const cualitativa_anual = calcularConversionCualitativa(promedio_anual);
+
+          // Determinar estado
+          let estado: EstadoPromedioAnual;
+          if (promedio_anual >= 7.0) {
+            estado = EstadoPromedioAnual.APROBADO;
+          } else if (promedio_anual < 5.0) {
+            estado = EstadoPromedioAnual.REPROBADO;
+          } else {
+            estado = EstadoPromedioAnual.SUPLETORIO;
+          }
+
+          const promedioPeriodo = this.promedioPeriodoRepository.create({
             estudiante_id: matricula.estudiante_id,
             materia_curso_id: materiaCurso.id,
-            periodo_lectivo_id
+            periodo_lectivo_id,
+            nota_trimestre_1: t1,
+            nota_trimestre_2: t2,
+            nota_trimestre_3: t3,
+            promedio_anual,
+            cualitativa_anual,
+            estado
           });
 
-          resultado.total_generados++;
+          promediosACrear.push(promedioPeriodo);
+
+          // 🔥 Guardar en batches
+          if (promediosACrear.length >= BATCH_SIZE) {
+            await this.promedioPeriodoRepository.save(promediosACrear);
+            resultado.total_generados += promediosACrear.length;
+            promediosACrear.length = 0;
+          }
 
         } catch (error) {
           resultado.total_fallidos++;
@@ -248,6 +378,20 @@ export class PromedioPeriodoService {
         }
       }
     }
+
+    // 🔥 Guardar el último batch
+    if (promediosACrear.length > 0) {
+      await this.promedioPeriodoRepository.save(promediosACrear);
+      resultado.total_generados += promediosACrear.length;
+    }
+
+    const endTime = Date.now();
+    const tiempoTotal = ((endTime - startTime) / 1000).toFixed(2);
+
+    console.log(`✅ Promedios anuales generados en ${tiempoTotal} segundos`);
+    console.log(`📊 Total procesados: ${resultado.total_procesados}`);
+    console.log(`✅ Total generados: ${resultado.total_generados}`);
+    console.log(`❌ Total fallidos: ${resultado.total_fallidos}`);
 
     return resultado;
   }
@@ -291,10 +435,12 @@ export class PromedioPeriodoService {
       );
     }
 
+    // 🔥 VALIDACIÓN CRÍTICA: Solo permitir calificar cuando está ACTIVADO
     if (periodo.estado_supletorio !== EstadoSupletorio.ACTIVADO) {
       throw new BadRequestException(
-        `Los supletorios no están activos. Fase actual: ${periodo.estado_supletorio}. ` +
-        `Solo se permite calificar cuando la fase es ACTIVADO.`
+        `No se pueden registrar calificaciones de supletorio. ` +
+        `Estado actual: ${periodo.estado_supletorio}. ` +
+        `Solo se permite calificar cuando el estado de supletorios es ACTIVADO.`
       );
     }
 
@@ -469,8 +615,8 @@ export class PromedioPeriodoService {
   }
 
   /**
- * 👑 ADMIN: Limpiar datos de supletorio por período (cuando se regresa a PENDIENTE)
- */
+   * 👑 ADMIN: Limpiar datos de supletorio por período (cuando se regresa a PENDIENTE)
+   */
   async limpiarDatosSupletorioPorPeriodo(periodo_lectivo_id: string) {
     const promedios = await this.promedioPeriodoRepository.find({
       where: {

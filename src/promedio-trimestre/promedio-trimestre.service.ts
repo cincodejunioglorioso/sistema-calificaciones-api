@@ -1,7 +1,8 @@
+// nest-backend/src/promedio-trimestre/promedio-trimestre.service.ts
 
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { PromedioTrimestre } from './entities/promedio-trimestre.entity';
 import { CreatePromedioTrimestreDto } from './dto/create-promedio-trimestre.dto';
 import { UpdatePromedioTrimestreDto } from './dto/update-promedio-trimestre.dto';
@@ -99,7 +100,6 @@ export class PromedioTrimestreService {
       throw new BadRequestException('El estudiante no tiene insumos calificados en esta materia-trimestre');
     }
 
-    // Calculamos los valores RAW (con todos los decimales de JS)
     const rawPonderadoInsumos = insumosData.promedio * (porcentajeInsumos / 100);
 
     const proyectoData = await this.obtenerNotaProyecto(estudiante_id, materiaCurso.curso_id, trimestre_id);
@@ -114,10 +114,8 @@ export class PromedioTrimestreService {
     }
     const rawPonderadoExamen = examenData * (porcentajeExamen / 100);
 
-    // ✅ LA CLAVE: Sumamos los valores exactos primero
     const sumaExacta = rawPonderadoInsumos + rawPonderadoProyecto + rawPonderadoExamen;
 
-    // Ahora sí, redondeamos el final y los parciales para la DB
     const nota_final_trimestre = Math.round(sumaExacta * 100) / 100;
     const ponderado_insumos = Math.round(rawPonderadoInsumos * 100) / 100;
     const ponderado_proyecto = Math.round(rawPonderadoProyecto * 100) / 100;
@@ -181,7 +179,13 @@ export class PromedioTrimestreService {
     return calificacion ? Number(calificacion.calificacion_examen) : null;
   }
 
+  /**
+   * 🚀 OPTIMIZADO: Generación masiva con batch processing
+   * Reduce 3,000+ queries → ~10 queries
+   */
   async generarPromediosMasivo(trimestre_id: string): Promise<ResultadoGeneracionMasiva> {
+    const startTime = Date.now();
+
     const trimestre = await this.trimestreRepository.findOne({
       where: { id: trimestre_id },
       relations: ['periodo_lectivo']
@@ -202,6 +206,7 @@ export class PromedioTrimestreService {
       estudiantes_incompletos: []
     };
 
+    // 🔥 OPTIMIZACIÓN 1: Traer todas las materias-curso de una vez
     const materiasCurso = await this.materiaCursoRepository.find({
       where: {
         curso: { periodo_lectivo_id: trimestre.periodo_lectivo_id }
@@ -213,40 +218,176 @@ export class PromedioTrimestreService {
       mc => mc.materia.tipoCalificacion === TipoCalificacion.CUANTITATIVA
     );
 
+    if (materiasCuantitativas.length === 0) {
+      return resultado;
+    }
+
+    // 🔥 OPTIMIZACIÓN 2: Obtener tipos de evaluación UNA VEZ
+    const tiposEvaluacion = await this.tipoEvaluacionRepository.find({
+      where: { periodo_lectivo_id: trimestre.periodo_lectivo_id }
+    });
+
+    const porcentajeInsumos = tiposEvaluacion.find(t => t.nombre === NombreTipoEvaluacion.INSUMOS)?.porcentaje || 70;
+    const porcentajeProyecto = tiposEvaluacion.find(t => t.nombre === NombreTipoEvaluacion.PROYECTO)?.porcentaje || 15;
+    const porcentajeExamen = tiposEvaluacion.find(t => t.nombre === NombreTipoEvaluacion.EXAMEN)?.porcentaje || 15;
+
+    // 🔥 OPTIMIZACIÓN 3: Obtener IDs de todos los cursos
+    const cursosIds = [...new Set(materiasCuantitativas.map(mc => mc.curso_id))];
+
+    // 🔥 OPTIMIZACIÓN 4: Batch query - Todas las matrículas activas
+    const matriculas = await this.matriculaRepository.find({
+      where: {
+        curso_id: In(cursosIds),
+        estado: EstadoMatricula.ACTIVO
+      },
+      relations: ['estudiante']
+    });
+
+    const matriculasActivas = matriculas.filter(
+      m => m.estudiante.estado !== EstadoEstudiante.INACTIVO_TEMPORAL
+    );
+
+    // 🔥 OPTIMIZACIÓN 5: Batch query - Promedios ya existentes
+    const materiasIds = materiasCuantitativas.map(mc => mc.id);
+    const estudiantesIds = matriculasActivas.map(m => m.estudiante_id);
+
+    const promediosExistentes = await this.promedioTrimestreRepository.find({
+      where: {
+        materia_curso_id: In(materiasIds),
+        estudiante_id: In(estudiantesIds),
+        trimestre_id
+      },
+      select: ['estudiante_id', 'materia_curso_id']
+    });
+
+    const yaExistenSet = new Set(
+      promediosExistentes.map(p => `${p.estudiante_id}:${p.materia_curso_id}`)
+    );
+
+    // 🔥 OPTIMIZACIÓN 6: Batch query - Todos los promedios de insumos
+    const insumosPromedios = await this.calificacionInsumoRepository
+      .createQueryBuilder('ci')
+      .innerJoin('ci.insumo', 'ins')
+      .where('ins.materia_curso_id IN (:...materiasIds)', { materiasIds })
+      .andWhere('ins.trimestre_id = :trimestre_id', { trimestre_id })
+      .andWhere('ins.estado = :estado', { estado: EstadoInsumo.CERRADO })
+      .andWhere('ci.estudiante_id IN (:...estudiantesIds)', { estudiantesIds })
+      .select('ci.estudiante_id', 'estudiante_id')
+      .addSelect('ins.materia_curso_id', 'materia_curso_id')
+      .addSelect('AVG(ci.nota_final)', 'promedio')
+      .addSelect('COUNT(ci.id)', 'total')
+      .groupBy('ci.estudiante_id')
+      .addGroupBy('ins.materia_curso_id')
+      .getRawMany();
+
+    const insumosMap = new Map<string, number>();
+    insumosPromedios.forEach(item => {
+      const key = `${item.estudiante_id}:${item.materia_curso_id}`;
+      insumosMap.set(key, Number(Number(item.promedio).toFixed(2)));
+    });
+
+    // 🔥 OPTIMIZACIÓN 7: Batch query - Todas las calificaciones de proyectos
+    const proyectos = await this.calificacionProyectoRepository.find({
+      where: {
+        curso_id: In(cursosIds),
+        trimestre_id,
+        estudiante_id: In(estudiantesIds)
+      },
+      select: ['estudiante_id', 'curso_id', 'calificacion_proyecto']
+    });
+
+    const proyectosMap = new Map<string, number>();
+    proyectos.forEach(p => {
+      const key = `${p.estudiante_id}:${p.curso_id}`;
+      proyectosMap.set(key, Number(p.calificacion_proyecto));
+    });
+
+    // 🔥 OPTIMIZACIÓN 8: Batch query - Todas las calificaciones de exámenes
+    const examenes = await this.calificacionExamenRepository.find({
+      where: {
+        materia_curso_id: In(materiasIds),
+        trimestre_id,
+        estudiante_id: In(estudiantesIds)
+      },
+      select: ['estudiante_id', 'materia_curso_id', 'calificacion_examen']
+    });
+
+    const examenesMap = new Map<string, number>();
+    examenes.forEach(e => {
+      const key = `${e.estudiante_id}:${e.materia_curso_id}`;
+      examenesMap.set(key, Number(e.calificacion_examen));
+    });
+
+    // 🔥 OPTIMIZACIÓN 9: Procesar en memoria y guardar en batch
+    const promediosACrear: PromedioTrimestre[] = [];
+    const BATCH_SIZE = 100; // Guardar cada 100 registros
+
     for (const materiaCurso of materiasCuantitativas) {
-      const matriculas = await this.matriculaRepository.find({
-        where: {
-          curso_id: materiaCurso.curso_id,
-          estado: EstadoMatricula.ACTIVO
-        },
-        relations: ['estudiante']
-      });
+      const matriculasDelCurso = matriculasActivas.filter(m => m.curso_id === materiaCurso.curso_id);
 
-      const matriculasActivas = matriculas.filter(m => m.estudiante.estado !== EstadoEstudiante.INACTIVO_TEMPORAL);
-
-      for (const matricula of matriculasActivas) {
+      for (const matricula of matriculasDelCurso) {
         resultado.total_procesados++;
 
-        try {
-          const existente = await this.promedioTrimestreRepository.findOne({
-            where: {
-              estudiante_id: matricula.estudiante_id,
-              materia_curso_id: materiaCurso.id,
-              trimestre_id
-            }
-          });
+        const key = `${matricula.estudiante_id}:${materiaCurso.id}`;
 
-          if (existente) {
-            continue;
+        // Skip si ya existe
+        if (yaExistenSet.has(key)) {
+          continue;
+        }
+
+        try {
+          // Obtener datos desde los Maps (en memoria)
+          const promedioInsumos = insumosMap.get(key);
+          if (!promedioInsumos) {
+            throw new Error('No tiene insumos calificados');
           }
 
-          await this.create({
+          const proyectoKey = `${matricula.estudiante_id}:${materiaCurso.curso_id}`;
+          const notaProyecto = proyectosMap.get(proyectoKey);
+          if (notaProyecto === undefined) {
+            throw new Error('No tiene calificación de proyecto');
+          }
+
+          const notaExamen = examenesMap.get(key);
+          if (notaExamen === undefined) {
+            throw new Error('No tiene calificación de examen');
+          }
+
+          // Calcular promedios
+          const rawPonderadoInsumos = promedioInsumos * (porcentajeInsumos / 100);
+          const rawPonderadoProyecto = notaProyecto * (porcentajeProyecto / 100);
+          const rawPonderadoExamen = notaExamen * (porcentajeExamen / 100);
+          const sumaExacta = rawPonderadoInsumos + rawPonderadoProyecto + rawPonderadoExamen;
+
+          const nota_final_trimestre = Math.round(sumaExacta * 100) / 100;
+          const ponderado_insumos = Math.round(rawPonderadoInsumos * 100) / 100;
+          const ponderado_proyecto = Math.round(rawPonderadoProyecto * 100) / 100;
+          const ponderado_examen = Math.round(rawPonderadoExamen * 100) / 100;
+
+          const cualitativa = calcularConversionCualitativa(nota_final_trimestre);
+
+          const promedio = this.promedioTrimestreRepository.create({
             estudiante_id: matricula.estudiante_id,
             materia_curso_id: materiaCurso.id,
-            trimestre_id
+            trimestre_id,
+            promedio_insumos: promedioInsumos,
+            ponderado_insumos,
+            nota_proyecto: notaProyecto,
+            ponderado_proyecto,
+            nota_examen: notaExamen,
+            ponderado_examen,
+            nota_final_trimestre,
+            cualitativa
           });
 
-          resultado.total_generados++;
+          promediosACrear.push(promedio);
+
+          // 🔥 Guardar en batches para evitar overhead de memoria
+          if (promediosACrear.length >= BATCH_SIZE) {
+            await this.promedioTrimestreRepository.save(promediosACrear);
+            resultado.total_generados += promediosACrear.length;
+            promediosACrear.length = 0; // Vaciar array
+          }
 
         } catch (error) {
           resultado.total_fallidos++;
@@ -260,6 +401,20 @@ export class PromedioTrimestreService {
         }
       }
     }
+
+    // 🔥 Guardar el último batch si quedaron registros
+    if (promediosACrear.length > 0) {
+      await this.promedioTrimestreRepository.save(promediosACrear);
+      resultado.total_generados += promediosACrear.length;
+    }
+
+    const endTime = Date.now();
+    const tiempoTotal = ((endTime - startTime) / 1000).toFixed(2);
+
+    console.log(`✅ Promedios trimestrales generados en ${tiempoTotal} segundos`);
+    console.log(`📊 Total procesados: ${resultado.total_procesados}`);
+    console.log(`✅ Total generados: ${resultado.total_generados}`);
+    console.log(`❌ Total fallidos: ${resultado.total_fallidos}`);
 
     return resultado;
   }

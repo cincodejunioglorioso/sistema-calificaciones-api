@@ -23,6 +23,8 @@ import {
   ComponenteCualitativoData,
 } from '../interfaces/datos-libreta.interface';
 import { NombreTrimestre } from '../../trimestres/entities/trimestre.entity';
+import { NombreTipoEvaluacion } from '../../tipos-evaluacion/entities/tipos-evaluacion.entity';
+import { TiposEvaluacionService } from '../../tipos-evaluacion/tipos-evaluacion.service';
 
 @Injectable()
 export class ReporteEstudianteService {
@@ -39,7 +41,8 @@ export class ReporteEstudianteService {
     private readonly trimestresService: TrimestresService,
     private readonly promedioTrimestreService: PromedioTrimestreService,
     private readonly cursosService: CursosService,
-    private readonly calificacionCualitativaService: CalificacionCualitativaService, // 🆕
+    private readonly calificacionCualitativaService: CalificacionCualitativaService,
+    private readonly tiposEvaluacionService: TiposEvaluacionService,
   ) { }
 
   /**
@@ -76,6 +79,8 @@ export class ReporteEstudianteService {
       await this.verificarPermisoTutor(docente_id, matricula.curso_id);
     }
 
+    const porcentaje_ponderacion = await this.obtenerPorcentajesPonderacion(trimestreActual.periodo_lectivo_id);
+
     // 5 y 6. Trimestres a mostrar
     const todosLosTrimestres = await this.trimestresService.findTrimestresByPeriodo(
       trimestreActual.periodo_lectivo_id
@@ -110,6 +115,7 @@ export class ReporteEstudianteService {
           : null;
 
         return {
+          trimestre_id: trimestre.id,
           trimestre_numero: this.getNumeroTrimestre(trimestre.nombre),
           trimestre_nombre: trimestre.nombre,
           trimestre_estado: trimestre.estado,
@@ -174,6 +180,7 @@ export class ReporteEstudianteService {
         fechaInicio: matricula.periodo_lectivo.fechaInicio,
         fechaFin: matricula.periodo_lectivo.fechaFin,
       },
+      porcentaje_ponderacion,
       trimestres: trimestresConCalificaciones,
       promedios_anuales,
       promedio_general_trimestres, // <--- Esto soluciona el error TS
@@ -313,6 +320,8 @@ export class ReporteEstudianteService {
       throw new NotFoundException(`Matrícula con ID ${matricula_id} no encontrada`);
     }
 
+    const porcentaje_ponderacion = await this.obtenerPorcentajesPonderacion(matricula.periodo_lectivo_id);
+
     // 2. Obtener todos los trimestres del período
     const todosLosTrimestres = await this.trimestresService.findTrimestresByPeriodo(
       matricula.periodo_lectivo_id
@@ -354,6 +363,7 @@ export class ReporteEstudianteService {
           : null;
 
         return {
+          trimestre_id: trimestre.id,
           trimestre_numero: this.getNumeroTrimestre(trimestre.nombre),
           trimestre_nombre: trimestre.nombre,
           trimestre_estado: trimestre.estado,
@@ -420,6 +430,7 @@ export class ReporteEstudianteService {
         fechaInicio: matricula.periodo_lectivo.fechaInicio,
         fechaFin: matricula.periodo_lectivo.fechaFin,
       },
+      porcentaje_ponderacion,
       trimestres: trimestresConCalificaciones,
       promedios_anuales,
       promedio_general_trimestres,
@@ -455,5 +466,23 @@ export class ReporteEstudianteService {
       case NombreTrimestre.TERCER_TRIMESTRE:
         return 3;
     }
+  }
+
+  private async obtenerPorcentajesPonderacion(periodo_lectivo_id: string): Promise<{
+    insumos: number;
+    proyecto: number;
+    examen: number;
+  }> {
+    const tiposEvaluacion = await this.tiposEvaluacionService.findByPeriodo(periodo_lectivo_id);
+
+    const insumos = tiposEvaluacion.find(t => t.nombre === NombreTipoEvaluacion.INSUMOS);
+    const proyecto = tiposEvaluacion.find(t => t.nombre === NombreTipoEvaluacion.PROYECTO);
+    const examen = tiposEvaluacion.find(t => t.nombre === NombreTipoEvaluacion.EXAMEN);
+
+    return {
+      insumos: insumos ? Number(insumos.porcentaje) : 70,
+      proyecto: proyecto ? Number(proyecto.porcentaje) : 15,
+      examen: examen ? Number(examen.porcentaje) : 15,
+    };
   }
 }

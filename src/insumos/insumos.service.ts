@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { TrimestreEstado } from '../trimestres/entities/trimestre.entity';
 import { EstadoPeriodo } from '../periodos-lectivos/entities/periodos-lectivo.entity';
 import { CalificacionInsumo } from '../calificacion_insumo/entities/calificacion_insumo.entity';
+import { MateriaCurso } from '../materia-curso/entities/materia-curso.entity';
 
 @Injectable()
 export class InsumosService {
@@ -16,6 +17,8 @@ export class InsumosService {
     private readonly insumoRepository: Repository<Insumo>,
     @InjectRepository(CalificacionInsumo)
     private readonly calificacionInsumoRepository: Repository<CalificacionInsumo>,
+    @InjectRepository(MateriaCurso)
+    private readonly materiaCursoRepository: Repository<MateriaCurso>
   ) { }
 
   async create(createInsumoDto: CreateInsumoDto, docente_id: string) {
@@ -90,13 +93,60 @@ export class InsumosService {
   }
 
   async findByMateriaCursoYTrimestre(materia_curso_id: string, trimestre_id: string) {
-    const insumos = await this.insumoRepository.find({
+    let insumos = await this.insumoRepository.find({
       where: { materia_curso_id, trimestre_id },
-      order: { createdAt: 'ASC' }
+      order: { 
+        createdAt: 'ASC',
+        nombre: 'ASC'
+      }
     });
 
     if (!insumos || insumos.length === 0) {
-      throw new NotFoundException('No se encontraron insumos para la materia y trimestre especificados');
+      const materiaCurso = await this.materiaCursoRepository.findOne({
+        where: { id: materia_curso_id }
+      });
+
+      if (!materiaCurso) {
+        throw new NotFoundException('Materia-curso no encontrada');
+      }
+
+      if (!materiaCurso.docente_id) {
+        throw new BadRequestException('La materia no tiene un docente asignado');
+      }
+
+      try {
+        await this.insumoRepository.manager.transaction(
+          'SERIALIZABLE',
+          async (transactionalEntityManager) => {
+            const count = await transactionalEntityManager.count(Insumo, {
+              where: { materia_curso_id, trimestre_id }
+            });
+
+            if (count === 0) {
+              const nuevosInsumos: Partial<Insumo>[] = [];
+              for (let i = 1; i <= 3; i++) {
+                nuevosInsumos.push({
+                  materia_curso_id,
+                  trimestre_id,
+                  docente_id: materiaCurso.docente_id,
+                  nombre: `Insumo ${i}`,
+                  estado: EstadoInsumo.BORRADOR,
+                });
+              }
+              await transactionalEntityManager.save(Insumo, nuevosInsumos);
+            }
+          }
+        );
+      } catch (error) {
+        // Si la transacción serializable falla por concurrencia,
+        // el otro request ya creó los insumos - simplemente continuamos
+      }
+
+      // Siempre re-consultar: si esta transacción creó los insumos o la otra lo hizo
+      insumos = await this.insumoRepository.find({
+        where: { materia_curso_id, trimestre_id },
+        order: { createdAt: 'ASC' }
+      });
     }
 
     return insumos;

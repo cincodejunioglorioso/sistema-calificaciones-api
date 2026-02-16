@@ -1,4 +1,3 @@
-// nest-backend/src/reportes/interfaces/datos-libreta.interface.ts
 import { ConversionCualitativa, CalificacionComponente } from '../../common/enums/cualitativa.enum'; // 🔄 CAMBIO
 import { EspecialidadCurso, NivelCurso } from '../../cursos/entities/curso.entity';
 import { NombreTrimestre, TrimestreEstado } from '../../trimestres/entities/trimestre.entity';
@@ -12,29 +11,30 @@ export interface CalificacionMateriaLibreta {
   nota_examen: number | null;
   ponderado_examen: number | null;
   nota_final: number;
-  cualitativa: ConversionCualitativa; // ✅ Para DA, AA, PA, NA
+  cualitativa: ConversionCualitativa; // Para DA, AA, PA, NA
 }
 
 export interface CalificacionesTrimestreLibreta {
+  trimestre_id: string;
   trimestre_numero: 1 | 2 | 3;
   trimestre_nombre: NombreTrimestre;
   trimestre_estado: TrimestreEstado;
   materias: CalificacionMateriaLibreta[];
   promedio_general: number | null;
-  cualitativa_general: ConversionCualitativa | null; // ✅ Para DA, AA, PA, NA
+  cualitativa_general: ConversionCualitativa | null; // Para DA, AA, PA, NA
 }
 
 export interface PromedioAnualMateria {
   materia_nombre: string;
   promedio_anual: number;
-  cualitativa: ConversionCualitativa; // ✅ Para DA, AA, PA, NA
+  cualitativa: ConversionCualitativa; // Para DA, AA, PA, NA
   nota_supletorio: number | null;
   promedio_final: number | null;
-  cualitativa_final: ConversionCualitativa | null; // ✅ Para DA, AA, PA, NA
+  cualitativa_final: ConversionCualitativa | null; // Para DA, AA, PA, NA
 }
 
 export interface ComponenteCualitativoLibreta {
-  trimestre_1: CalificacionComponente | null; // ✅ Para +A, A, B+, etc.
+  trimestre_1: CalificacionComponente | null; // Para +A, A, B+, etc.
   trimestre_2: CalificacionComponente | null;
   trimestre_3: CalificacionComponente | null;
   promedio_anual: CalificacionComponente | null;
@@ -69,6 +69,12 @@ export interface DatosLibretaEstudiante {
     fechaInicio: Date;
     fechaFin: Date;
   };
+
+  porcentaje_ponderacion: {
+    insumos: number;
+    proyecto: number;
+    examen: number;
+  }
 
   trimestres: CalificacionesTrimestreLibreta[];
   promedios_anuales: PromedioAnualMateria[] | null;

@@ -10,9 +10,7 @@ import { DocenteOrAdminGuard } from '../auth/guards/docente-or-admin.guard';
 export class ReportesController {
   constructor(private readonly reportesService: ReportesService) { }
 
-  // ==========================================
   // RUTAS ESPECÍFICAS
-  // ==========================================
 
   /**
    * GET PDF de libreta de estudiante
@@ -25,7 +23,6 @@ export class ReportesController {
     @Request() req: any,
     @Res() res: Response,
   ) {
-    // 1. Obtenemos los datos
     const datos = await this.reportesService.generarDatosLibretaEstudiante(
       estudiante_id,
       trimestre_id,
@@ -40,12 +37,8 @@ export class ReportesController {
       req.user.docente_id
     );
 
-    // 2. SOLUCIÓN AL ERROR:
-    // Buscamos el trimestre actual dentro del array de trimestres para sacar el nombre
-    // Tu interfaz dice que trimestres es CalificacionesTrimestreLibreta[]
-    const trimestreActual = datos.trimestres.find(t => t.trimestre_estado === 'FINALIZADO' || t.materias.length > 0);
+    const trimestreActual = datos.trimestres.find(t => t.trimestre_id === trimestre_id);
 
-    // Si por alguna razón no lo encuentra, usamos un fallback
     const nombreTrimestre = trimestreActual
       ? trimestreActual.trimestre_nombre.replace(/\s+/g, '_')
       : 'Reporte';

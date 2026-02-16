@@ -19,7 +19,7 @@ export class PdfGeneratorService {
             try {
                 const doc = new PDFDocument({
                     size: 'A4',
-                    layout: 'landscape', // HORIZONTAL
+                    layout: 'landscape',
                     margins: { top: 30, bottom: 30, left: 30, right: 30 }
                 });
 
@@ -32,8 +32,7 @@ export class PdfGeneratorService {
                 // ENCABEZADO INSTITUCIONAL
                 this.dibujarEncabezadoLibreta(doc, datos);
 
-
-                // TABLA DE CALIFICACIONES POR TRIMESTRE (COMPACTA)
+                // TABLA DE CALIFICACIONES POR TRIMESTRE
                 this.dibujarTablaTrimestreCompacta(doc, datos);
 
                 // ESCALAS Y OBSERVACIONES
@@ -74,7 +73,6 @@ export class PdfGeneratorService {
                         doc.addPage();
                     }
 
-                    // Generar libreta para este estudiante
                     this.dibujarEncabezadoLibreta(doc, datos);
                     this.dibujarTablaTrimestreCompacta(doc, datos);
                     this.dibujarEscalas(doc, datos);
@@ -89,7 +87,7 @@ export class PdfGeneratorService {
     }
 
     /**
-     * Genera PDF de reporte de materia por trimestre (ORIENTACIÓN HORIZONTAL)
+     * Genera PDF de reporte de materia por trimestre
      */
     async generarReporteMateriaPDF(datos: DatosReporteMateria): Promise<Buffer> {
         return new Promise((resolve, reject) => {
@@ -122,13 +120,13 @@ export class PdfGeneratorService {
     }
 
     /**
- * Genera PDF de concentrado de calificaciones (LEGAL LANDSCAPE)
+ * Genera PDF de concentrado de calificaciones
  */
     async generarConcentradoPDF(datos: DatosConcentradoCalificaciones): Promise<Buffer> {
         return new Promise((resolve, reject) => {
             try {
                 const doc = new PDFDocument({
-                    size: 'LEGAL',
+                    size: 'A4',
                     layout: 'landscape',
                     margins: { top: 20, bottom: 20, left: 20, right: 20 }
                 });
@@ -157,7 +155,7 @@ export class PdfGeneratorService {
         return new Promise((resolve, reject) => {
             try {
                 const doc = new PDFDocument({
-                    size: 'LEGAL',
+                    size: 'A4',
                     layout: 'portrait',
                     margins: { top: 30, bottom: 30, left: 30, right: 30 }
                 });
@@ -381,6 +379,10 @@ export class PdfGeneratorService {
         const colorAzulFinal = '#D9E6F2';
         const colorGrisSupletorio = '#EAEAEA';
 
+        const porcInsumos = datos.porcentaje_ponderacion.insumos;
+        const porcProyecto = datos.porcentaje_ponderacion.proyecto;
+        const porcExamen = datos.porcentaje_ponderacion.examen;
+
         // ============ TÍTULO "REPORTE DE CALIFICACIONES" ============
         const tituloTableHeight = 12;
         const tableWidth = pageWidth - marginLeft - marginRight;
@@ -505,11 +507,11 @@ export class PdfGeneratorService {
         for (let i = 0; i < 3; i++) {
             const micros = [
                 { t: 'PROMEDIO', w: microWidths.promedio },
-                { t: '70%', w: microWidths.ponderado70 },
+                { t: `${porcInsumos}%`, w: microWidths.ponderado70 }, // 🔄 DINÁMICO
                 { t: 'PROYECTO', w: microWidths.proyectoIntegrador },
-                { t: '15%', w: microWidths.ponderado15_1 },
+                { t: `${porcProyecto}%`, w: microWidths.ponderado15_1 }, // 🔄 DINÁMICO
                 { t: 'EXAMEN', w: microWidths.pruebaEstructurada },
-                { t: '15%', w: microWidths.ponderado15_2 },
+                { t: `${porcExamen}%`, w: microWidths.ponderado15_2 }, // 🔄 DINÁMICO
                 { t: 'NOTA TOTAL', w: microWidths.notaTotal },
                 { t: 'EQUIV', w: microWidths.equivalencia }
             ];
@@ -677,7 +679,7 @@ export class PdfGeneratorService {
             .stroke('#000');
 
         doc.fontSize(7).font('Helvetica-Bold').fillColor('#000')
-            .text('EVALUACIÓN COMPORTAMENTAL', xPos, currentY + 3, {
+            .text('COMPORTAMIENTO', xPos, currentY + 3, {
                 width: tabla1Width,
                 align: 'center'
             });
@@ -1241,9 +1243,6 @@ export class PdfGeneratorService {
     }
 
     // ==================== MÉTODOS DE REPORTE DE MATERIA ====================
-
-
-
     private dibujarEncabezadoReporteMateria(doc: PDFKit.PDFDocument, datos: DatosReporteMateria) {
         const pageWidth = doc.page.width;
         const marginLeft = 30;
@@ -1253,7 +1252,7 @@ export class PdfGeneratorService {
 
         // ============ NOMBRE DE LA INSTITUCIÓN ============
         doc
-            .fontSize(12)
+            .fontSize(10)
             .font('Helvetica-Bold')
             .fillColor('#000')
             .text(
@@ -1270,7 +1269,7 @@ export class PdfGeneratorService {
 
         // ============ CUADRO DE CALIFICACIONES ============
         doc
-            .fontSize(10)
+            .fontSize(9)
             .font('Helvetica-Bold')
             .text(
                 'CUADRO DE CALIFICACIONES',
@@ -1303,7 +1302,7 @@ export class PdfGeneratorService {
 
         // ============ PERÍODO (Ej: 2024-2025) ============
         doc
-            .fontSize(9)
+            .fontSize(8)
             .font('Helvetica')
             .text(
                 `${datos.periodo.nombre}`,
@@ -1315,12 +1314,12 @@ export class PdfGeneratorService {
                 }
             );
 
-        currentY += 20;
+        currentY += 10;
 
         // ============ ASIGNATURA (CENTRADA) ============
         const asignaturaTexto = `ASIGNATURA:     ${datos.materia.nombre.toUpperCase()}`;
         doc
-            .fontSize(9)
+            .fontSize(8)
             .font('Helvetica-Bold')
             .text(
                 asignaturaTexto,
@@ -1343,7 +1342,7 @@ export class PdfGeneratorService {
         const lineaCompleta = `CURSO:  ${cursoTexto}                    DOCENTE:  ${docenteNombre}`;
 
         doc
-            .fontSize(9)
+            .fontSize(8)
             .font('Helvetica')
             .text(
                 lineaCompleta,
@@ -1355,7 +1354,7 @@ export class PdfGeneratorService {
                 }
             );
 
-        currentY += 25;
+        currentY += 15;
 
         // Guardar posición Y para la siguiente fase
         doc.y = currentY;
@@ -1456,7 +1455,7 @@ export class PdfGeneratorService {
         currentY += headerHeight2;
 
         // ============ FILAS DE ESTUDIANTES ============
-        const rowHeight = 12;
+        const rowHeight = 10;
         datos.calificaciones.forEach((cal, index) => {
             if (currentY + rowHeight > doc.page.height - marginBottom) {
                 doc.addPage();
@@ -1706,7 +1705,7 @@ export class PdfGeneratorService {
             'Domina los aprendizajes (DA)             9.00 a 10.00',
             'Alcanza los aprendizajes (AA)            7.00 a 8.99',
             'Está próximo a alcanzar (PA)             4.01 a 6.99',
-            'No alcanza los aprendizajes (NA)         Menor a 4'
+            'No alcanza los aprendizajes (NA)         <= 4'
         ];
 
         escalas.forEach(escala => {
@@ -1902,53 +1901,32 @@ export class PdfGeneratorService {
  */
     private dibujarFirmaDocente(doc: PDFKit.PDFDocument, datos: DatosReporteMateria) {
         const pageWidth = doc.page.width;
-        let currentY = doc.y + 25; // Espacio desde la sección anterior
+        // Reducimos el espacio inicial de 18 a 10
+        let currentY = doc.y + 10;
 
-        // ============ LÍNEA DE FIRMA (CENTRADA) ============
-        const lineaWidth = 200; // Ancho de la línea de firma
-        const lineaX = (pageWidth - lineaWidth) / 2; // Centrar horizontalmente
+        const lineaWidth = 180; // Un poco más corta
+        const lineaX = (pageWidth - lineaWidth) / 2;
 
         doc.moveTo(lineaX, currentY)
             .lineTo(lineaX + lineaWidth, currentY)
+            .lineWidth(0.5) // Línea más fina
             .stroke('#000');
 
-        currentY += 3; // Espacio entre línea y texto
+        currentY += 2; // Espacio mínimo
 
-        // ============ NOMBRE DEL DOCENTE (CENTRADO) ============
         const docenteNombre = datos.docente
             ? `${datos.docente.apellidos} ${datos.docente.nombres}`.toUpperCase()
             : 'SIN ASIGNAR';
 
-        doc.fontSize(6).font('Helvetica-Bold').fillColor('#000')
-            .text(
-                docenteNombre,
-                lineaX,
-                currentY,
-                {
-                    width: lineaWidth,
-                    align: 'center'
-                }
-            );
+        doc.fontSize(6).font('Helvetica-Bold')
+            .text(docenteNombre, lineaX, currentY, { width: lineaWidth, align: 'center' });
 
-        currentY += 10; // Espacio entre nombre y rol
+        currentY += 7; // Antes 10
 
-        // ============ ROL "DOCENTE" (CENTRADO) ============
-        doc.fontSize(6).font('Helvetica').fillColor('#000')
-            .text(
-                'DOCENTE',
-                lineaX,
-                currentY,
-                {
-                    width: lineaWidth,
-                    align: 'center'
-                }
-            );
+        doc.fontSize(6).font('Helvetica')
+            .text('DOCENTE', lineaX, currentY, { width: lineaWidth, align: 'center' });
 
-        // Actualizar posición Y
-        doc.y = currentY + 10;
-
-        // Resetear color
-        doc.fillColor('#000');
+        doc.y = currentY + 5;
     }
 
 
@@ -2146,12 +2124,12 @@ export class PdfGeneratorService {
         currentY = imprimirEncabezados(currentY);
 
         // ============ FILAS DE ESTUDIANTES (DATOS REALES) ============
-        const rowHeight = 18;
+        const rowHeight = 12;
 
         datos.estudiantes.forEach((estudiante, index) => {
             // Control de salto de página
             if (currentY + rowHeight > pageHeight - marginBottom) {
-                doc.addPage({ size: 'LEGAL', layout: 'landscape', margins: { top: 20, bottom: 20, left: 20, right: 20 } });
+                doc.addPage({ size: 'A4', layout: 'landscape', margins: { top: 20, bottom: 20, left: 20, right: 20 } });
                 currentY = 40;
                 currentY = imprimirEncabezados(currentY);
             }
@@ -2243,88 +2221,29 @@ export class PdfGeneratorService {
     // ========================= METODOS PARA REPORTE DE INSUMOS =============================================
 
     private dibujarEncabezadoReporteInsumos(doc: PDFKit.PDFDocument, datos: DatosReporteInsumos) {
-        const pageWidth = doc.page.width;
         const marginLeft = 30;
-        const marginRight = 30;
-        const encabezadoWidth = pageWidth - marginLeft - marginRight;
-        let currentY = 30;
+        const encabezadoWidth = doc.page.width - 60;
+        let currentY = 25; // Empezamos un poco más arriba
 
-        // Nombre de la institución
-        doc
-            .fontSize(12)
-            .font('Helvetica-Bold')
-            .fillColor('#000')
-            .text(
-                'UNIDAD EDUCATIVA FISCAL CINCO DE JUNIO',
-                marginLeft,
-                currentY,
-                { width: encabezadoWidth, align: 'center' }
-            );
+        doc.fontSize(10).font('Helvetica-Bold').text('UNIDAD EDUCATIVA FISCAL CINCO DE JUNIO', marginLeft, currentY, { align: 'center' });
 
-        currentY += 18;
+        currentY += 14; // Reducimos de 18 a 14
+        doc.fontSize(9).text(`APORTES DEL ${datos.trimestre.nombre.toUpperCase()}`, marginLeft, currentY, { align: 'center' });
 
-        // Título del reporte
-        doc
-            .fontSize(10)
-            .font('Helvetica-Bold')
-            .text(
-                `APORTES DEL ${datos.trimestre.nombre.toUpperCase()}`,
-                marginLeft,
-                currentY,
-                { width: encabezadoWidth, align: 'center' }
-            );
+        currentY += 12; // Reducimos de 15 a 12
+        doc.fontSize(8).font('Helvetica').text(datos.periodo.nombre, marginLeft, currentY, { align: 'center' });
 
         currentY += 15;
+        const asignaturaTexto = `ASIGNATURA: ${datos.materia.nombre.toUpperCase()}`;
+        doc.fontSize(8).font('Helvetica-Bold').text(asignaturaTexto, marginLeft, currentY, { align: 'center' });
 
-        // Período
-        doc
-            .fontSize(9)
-            .font('Helvetica')
-            .text(
-                datos.periodo.nombre,
-                marginLeft,
-                currentY,
-                { width: encabezadoWidth, align: 'center' }
-            );
-
-        currentY += 20;
-
-        // Asignatura
-        const asignaturaTexto = `ASIGNATURA:     ${datos.materia.nombre.toUpperCase()}`;
-        doc
-            .fontSize(9)
-            .font('Helvetica-Bold')
-            .text(
-                asignaturaTexto,
-                marginLeft,
-                currentY,
-                { width: encabezadoWidth, align: 'center' }
-            );
-
-        currentY += 15;
-
-        // Curso y Docente
+        currentY += 12;
         const cursoTexto = `${datos.curso.nivel} "${datos.curso.paralelo}"`;
-        const docenteNombre = datos.docente
-            ? `${datos.docente.apellidos} ${datos.docente.nombres}`.toUpperCase()
-            : 'SIN ASIGNAR';
+        const docente = datos.docente ? `${datos.docente.apellidos} ${datos.docente.nombres}`.toUpperCase() : 'SIN ASIGNAR';
+        doc.fontSize(8).font('Helvetica').text(`CURSO: ${cursoTexto}           DOCENTE: ${docente}`, marginLeft, currentY, { align: 'center' });
 
-        const lineaCompleta = `CURSO:  ${cursoTexto}                    DOCENTE:  ${docenteNombre}`;
-
-        doc
-            .fontSize(9)
-            .font('Helvetica')
-            .text(
-                lineaCompleta,
-                marginLeft,
-                currentY,
-                { width: encabezadoWidth, align: 'center' }
-            );
-
-        currentY += 25;
-
+        currentY += 15; // Espacio final antes de la tabla
         doc.y = currentY;
-        doc.fillColor('#000');
     }
     private dibujarTablaInsumos(doc: PDFKit.PDFDocument, datos: DatosReporteInsumos) {
         const pageWidth = doc.page.width;
@@ -2340,25 +2259,25 @@ export class PdfGeneratorService {
         const colorFooterVerde = '#ABEBC6';
 
         const numInsumos = datos.insumos_orden.length;
-        const numeroWidth = 25;
-        const nombreWidth = 180;
-        const promedioWidth = 45;
-        const cualitativaWidth = 40;
+        const numeroWidth = 15;
+        const nombreWidth = 160;
+        const promedioWidth = 35;
+        const cualitativaWidth = 30;
 
         const insumosDisponibleWidth = pageWidth - marginLeft - marginRight - numeroWidth - nombreWidth - promedioWidth - cualitativaWidth;
         const insumoWidth = insumosDisponibleWidth / numInsumos;
         const tableWidth = numeroWidth + nombreWidth + (insumoWidth * numInsumos) + promedioWidth + cualitativaWidth;
         const startX = (pageWidth - tableWidth) / 2;
 
-        const headerHeight = 60;
-        const rowHeight = 16;
+        const headerHeight = 45;
+        const rowHeight = 10;
 
         // --- FUNCIÓN AUXILIAR DE CELDA ---
         const drawInsumoCell = (x: number, y: number, w: number, h: number, text: string, bgColor: string, isBold = false, align: 'center' | 'left' = 'center', forceRed = false) => {
             doc.rect(x, y, w, h).fillAndStroke(bgColor, '#333');
 
             doc.font(isBold ? 'Helvetica-Bold' : 'Helvetica')
-                .fontSize(7)
+                .fontSize(6)
                 .fillColor(forceRed ? colorRojoAlerta : '#000')
                 .text(text || '', x + 2, y + (h / 2) - 3, { width: w - 4, align: align });
 
@@ -2450,7 +2369,7 @@ export class PdfGeneratorService {
         xFinal += promedioWidth;
         drawInsumoCell(xFinal, currentY, cualitativaWidth, rowHeight, datos.cualitativa_general_curso, colorFooterVerde, true);
 
-        currentY += rowHeight + 20;
+        currentY += rowHeight + 10;
         doc.y = currentY;
     }
 

@@ -182,13 +182,29 @@ export class MateriaCursoService {
       throw new BadRequestException('El docente no existe');
     }
 
-    // 🆕 BUSCAR PERÍODO ACTIVO
-    const periodoActivo = await this.periodosLectivosService.findActivo();
+    // 🆕 BUSCAR PERÍODO ACTIVO (sin lanzar error si no existe)
+    let periodoActivo;
+    try {
+      periodoActivo = await this.periodosLectivosService.findActivo();
+    } catch (error) {
+      // Si no hay período activo, retornar respuesta vacía
+      return {
+        docente: {
+          id: docente.id,
+          nombres: docente.nombres,
+          apellidos: docente.apellidos,
+        },
+        periodo: null,
+        totalMaterias: 0,
+        materiasActivas: 0,
+        materias: [],
+      };
+    }
 
     const materias = await this.materiaCursoRepository.find({
       where: {
         docente_id: docente_id,
-        periodo_lectivo_id: periodoActivo.id  // 🔥 FILTRAR POR PERÍODO ACTIVO
+        periodo_lectivo_id: periodoActivo.id
       },
       order: {
         curso: {

@@ -3,7 +3,7 @@ import { CreatePeriodoLectivoDto } from './dto/create-periodos-lectivo.dto';
 import { UpdatePeriodoLectivoDto } from './dto/update-periodos-lectivo.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EstadoPeriodo, EstadoSupletorio, PeriodoLectivo } from './entities/periodos-lectivo.entity';
-import { Not, Repository, DataSource } from 'typeorm';
+import { Not, Repository, DataSource, In } from 'typeorm';
 import { TrimestresService } from '../trimestres/trimestres.service';
 import { EstadoMatricula, Matricula } from '../matriculas/entities/matricula.entity';
 import { Curso, EstadoCurso, NivelCurso } from '../cursos/entities/curso.entity';
@@ -268,8 +268,9 @@ export class PeriodosLectivosService {
   }
 
   // 👑 ADMIN: Finalizar período (ACTIVO → FINALIZADO)
-
+  // 👑 ADMIN: Finalizar período (ACTIVO → FINALIZADO)
   async cambiarEstado(periodo_id: string) {
+    const startTime = Date.now();
     const periodo = await this.findOne(periodo_id);
 
     if (periodo.estado === EstadoPeriodo.FINALIZADO) {
@@ -299,8 +300,8 @@ export class PeriodosLectivosService {
     await queryRunner.startTransaction();
 
     try {
-      let estudiantesGraduados = 0;
-      let estudiantesSinMatricula = 0;
+      let contadorGraduados = 0;
+      let contadorSinMatricula = 0;
 
       // ================================================
       // 1️⃣ OBTENER TODAS LAS MATRÍCULAS ACTIVAS DEL PERÍODO
@@ -315,62 +316,105 @@ export class PeriodosLectivosService {
         .getMany();
 
       // ================================================
-      // 2️⃣ PROCESAR ESTUDIANTES DE 3° BACHILLERATO
+      // 2️⃣ PROCESAR ESTUDIANTES DE 3° BACHILLERATO (BATCH)
       // ================================================
       const matriculasTercero = matriculasActivas.filter(
         m => m.curso.nivel === NivelCurso.TERCERO_BACHILLERATO
       );
 
-      for (const matricula of matriculasTercero) {
-        // Obtener todos los promedios del estudiante en este período
-        const promedios = await queryRunner.manager
+      // IDs de estudiantes que NO son de 3ro (para batch update después)
+      const otrasMatriculas = matriculasActivas.filter(
+        m => m.curso.nivel !== NivelCurso.TERCERO_BACHILLERATO
+      );
+      const idsEstudiantesOtros = [...new Set(otrasMatriculas.map(m => m.estudiante_id))];
+
+      if (matriculasTercero.length > 0) {
+        const estudiantesTerceroIds = matriculasTercero.map(m => m.estudiante_id);
+
+        // 🔥 UNA SOLA QUERY: Obtener TODOS los promedios de todos los estudiantes de 3ro
+        const todosPromedios = await queryRunner.manager
           .createQueryBuilder(PromedioPeriodo, 'pp')
-          .where('pp.estudiante_id = :estudianteId', { estudianteId: matricula.estudiante_id })
+          .innerJoin('pp.materia_curso', 'mc')
+          .innerJoin('mc.materia', 'm')
+          .where('pp.estudiante_id IN (:...ids)', { ids: estudiantesTerceroIds })
           .andWhere('pp.periodo_lectivo_id = :periodoId', { periodoId: periodo_id })
+          .andWhere('m.tipoCalificacion = :tipo', { tipo: TipoCalificacion.CUANTITATIVA })
+          .select([
+            'pp.estudiante_id',
+            'pp.promedio_anual',
+            'pp.promedio_final',
+            'pp.estado'
+          ])
           .getMany();
 
-        // ✅ APROBADO si TODOS los promedios tienen promedio_anual >= 7.0
-        const todosAprobados = promedios.length > 0 &&
-          promedios.every(p => Number(p.promedio_anual) >= 7.0);
+        // 🔥 Agrupar por estudiante con Map O(1)
+        const promediosPorEstudiante = new Map<string, PromedioPeriodo[]>();
+        todosPromedios.forEach(p => {
+          if (!promediosPorEstudiante.has(p.estudiante_id)) {
+            promediosPorEstudiante.set(p.estudiante_id, []);
+          }
+          promediosPorEstudiante.get(p.estudiante_id)!.push(p);
+        });
 
-        if (todosAprobados) {
-          // ✅ Graduado
+        // 🔥 Clasificar en memoria (0 queries adicionales)
+        const idsAGraduar: string[] = [];
+        const idsASinMatricula: string[] = [];
+
+        for (const matricula of matriculasTercero) {
+          const promedios = promediosPorEstudiante.get(matricula.estudiante_id) || [];
+
+          // ✅ CORRECTO: Verificar promedio_final (incluye supletorio) o promedio_anual
+          const todosAprobados = promedios.length > 0 &&
+            promedios.every(p => {
+              // Si tiene promedio_final (rindió supletorio), usar ese
+              // Si no, usar promedio_anual (aprobó directo)
+              const notaDecisiva = p.promedio_final !== null && p.promedio_final !== undefined
+                ? Number(p.promedio_final)
+                : Number(p.promedio_anual);
+              return notaDecisiva >= 7.0;
+            });
+
+          if (todosAprobados) {
+            idsAGraduar.push(matricula.estudiante_id);
+          } else {
+            idsASinMatricula.push(matricula.estudiante_id);
+          }
+        }
+
+        // 🔥 BATCH UPDATE: Máximo 2 queries para TODOS los de 3ro
+        if (idsAGraduar.length > 0) {
           await queryRunner.manager.update(
             Estudiante,
-            { id: matricula.estudiante_id },
+            { id: In(idsAGraduar) },
             { estado: EstadoEstudiante.GRADUADO }
           );
-          estudiantesGraduados++;
-        } else {
-          // ❌ No aprobó todas las materias → SIN_MATRICULA
+          contadorGraduados = idsAGraduar.length;
+        }
+
+        if (idsASinMatricula.length > 0) {
           await queryRunner.manager.update(
             Estudiante,
-            { id: matricula.estudiante_id },
+            { id: In(idsASinMatricula) },
             { estado: EstadoEstudiante.SIN_MATRICULA }
           );
-          estudiantesSinMatricula++;
+          contadorSinMatricula += idsASinMatricula.length;
         }
       }
 
       // ================================================
-      // 3️⃣ PROCESAR ESTUDIANTES QUE NO SON DE 3° BACHILLERATO
+      // 3️⃣ PROCESAR ESTUDIANTES QUE NO SON DE 3° BACHILLERATO (BATCH)
       // ================================================
-      const otrasMatriculas = matriculasActivas.filter(
-        m => m.curso.nivel !== NivelCurso.TERCERO_BACHILLERATO
-      );
-
-      for (const matricula of otrasMatriculas) {
-        // Todos pasan a SIN_MATRICULA (esperan nueva matrícula el siguiente período)
+      if (idsEstudiantesOtros.length > 0) {
         await queryRunner.manager.update(
           Estudiante,
-          { id: matricula.estudiante_id },
+          { id: In(idsEstudiantesOtros) },
           { estado: EstadoEstudiante.SIN_MATRICULA }
         );
-        estudiantesSinMatricula++;
+        contadorSinMatricula += idsEstudiantesOtros.length;
       }
 
       // ================================================
-      // 4️⃣ FINALIZAR TODAS LAS MATRÍCULAS ACTIVAS
+      // 4️⃣ FINALIZAR TODAS LAS MATRÍCULAS ACTIVAS (ya es batch)
       // ================================================
       const resultMatriculas = await queryRunner.manager.update(
         Matricula,
@@ -382,7 +426,7 @@ export class PeriodosLectivosService {
       );
 
       // ================================================
-      // 5️⃣ INACTIVAR ASIGNACIONES (MATERIA-CURSO)
+      // 5️⃣ INACTIVAR ASIGNACIONES (MATERIA-CURSO) (ya es batch)
       // ================================================
       const resultMateriasCurso = await queryRunner.manager
         .createQueryBuilder()
@@ -393,7 +437,7 @@ export class PeriodosLectivosService {
         .execute();
 
       // ================================================
-      // 6️⃣ INACTIVAR CURSOS
+      // 6️⃣ INACTIVAR CURSOS (ya es batch)
       // ================================================
       const resultCursos = await queryRunner.manager
         .createQueryBuilder()
@@ -404,7 +448,7 @@ export class PeriodosLectivosService {
         .execute();
 
       // ================================================
-      // 7️⃣ FINALIZAR PERÍODO LECTIVO
+      // 7️⃣ FINALIZAR PERÍODO LECTIVO (ya es batch)
       // ================================================
       await queryRunner.manager.update(
         PeriodoLectivo,
@@ -414,12 +458,19 @@ export class PeriodosLectivosService {
 
       await queryRunner.commitTransaction();
 
+      const endTime = Date.now();
+      const tiempoTotal = ((endTime - startTime) / 1000).toFixed(2);
+
+      console.log(`✅ Período finalizado en ${tiempoTotal} segundos`);
+      console.log(`🎓 Graduados: ${contadorGraduados}`);
+      console.log(`📋 Sin matrícula: ${contadorSinMatricula}`);
+
       return {
         message: `Período ${periodo.nombre} finalizado exitosamente`,
         periodo: await this.findOne(periodo_id),
         estadisticas: {
-          estudiantes_graduados: estudiantesGraduados,
-          estudiantes_sin_matricula: estudiantesSinMatricula,
+          estudiantes_graduados: contadorGraduados,
+          estudiantes_sin_matricula: contadorSinMatricula,
           matriculas_finalizadas: resultMatriculas.affected || 0,
           materias_curso_inactivadas: resultMateriasCurso.affected || 0,
           cursos_inactivados: resultCursos.affected || 0
