@@ -29,6 +29,20 @@ export class MateriasController {
     return this.materiasService.findOne(id);
   }
 
+  // 🆕 Verificar implicaciones de edición
+  @UseGuards(AdminGuard)
+  @Post(':id/verificar-edicion')
+  verificarEdicion(@Param('id') id: string, @Body() updateMateriaDto: UpdateMateriaDto) {
+    return this.materiasService.verificarImplicacionesEdicion(id, updateMateriaDto);
+  }
+
+  // 🆕 Verificar asignaciones activas (para desactivar)
+  @UseGuards(AdminGuard)
+  @Get(':id/verificar-asignaciones')
+  verificarAsignaciones(@Param('id') id: string) {
+    return this.materiasService.verificarAsignacionesActivas(id);
+  }
+
   @UseGuards(AdminGuard)
   @Put(':id')
   update(@Param('id') id: string, @Body() updateMateriaDto: UpdateMateriaDto) {
@@ -40,5 +54,4 @@ export class MateriasController {
   remove(@Param('id') id: string) {
     return this.materiasService.remove(id);
   }
-
 }

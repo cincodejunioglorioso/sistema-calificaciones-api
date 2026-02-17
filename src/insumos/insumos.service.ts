@@ -1,10 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateInsumoDto } from './dto/create-insumo.dto';
 import { UpdateInsumoDto } from './dto/update-insumo.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EstadoInsumo, Insumo } from './entities/insumo.entity';
 import { Repository } from 'typeorm';
-import { TrimestreEstado } from '../trimestres/entities/trimestre.entity';
+import { Trimestre, TrimestreEstado } from '../trimestres/entities/trimestre.entity';
 import { EstadoPeriodo } from '../periodos-lectivos/entities/periodos-lectivo.entity';
 import { CalificacionInsumo } from '../calificacion_insumo/entities/calificacion_insumo.entity';
 import { MateriaCurso } from '../materia-curso/entities/materia-curso.entity';
@@ -18,7 +18,9 @@ export class InsumosService {
     @InjectRepository(CalificacionInsumo)
     private readonly calificacionInsumoRepository: Repository<CalificacionInsumo>,
     @InjectRepository(MateriaCurso)
-    private readonly materiaCursoRepository: Repository<MateriaCurso>
+    private readonly materiaCursoRepository: Repository<MateriaCurso>,
+    @InjectRepository(Trimestre)
+    private readonly trimestreRepository: Repository<Trimestre>,
   ) { }
 
   async create(createInsumoDto: CreateInsumoDto, docente_id: string) {
@@ -95,13 +97,27 @@ export class InsumosService {
   async findByMateriaCursoYTrimestre(materia_curso_id: string, trimestre_id: string) {
     let insumos = await this.insumoRepository.find({
       where: { materia_curso_id, trimestre_id },
-      order: { 
+      order: {
         createdAt: 'ASC',
         nombre: 'ASC'
       }
     });
 
     if (!insumos || insumos.length === 0) {
+      // 🆕 Verificar estado del trimestre ANTES de auto-crear
+      const trimestre = await this.trimestreRepository.findOne({
+        where: { id: trimestre_id }
+      });
+
+      if (!trimestre) {
+        throw new NotFoundException('Trimestre no encontrado');
+      }
+
+      // Solo auto-crear insumos si el trimestre está ACTIVO
+      if (trimestre.estado !== TrimestreEstado.ACTIVO) {
+        return []; // Retornar vacío para trimestres PENDIENTES o FINALIZADOS
+      }
+
       const materiaCurso = await this.materiaCursoRepository.findOne({
         where: { id: materia_curso_id }
       });
@@ -142,7 +158,7 @@ export class InsumosService {
         // el otro request ya creó los insumos - simplemente continuamos
       }
 
-      // Siempre re-consultar: si esta transacción creó los insumos o la otra lo hizo
+      // Siempre re-consultar
       insumos = await this.insumoRepository.find({
         where: { materia_curso_id, trimestre_id },
         order: { createdAt: 'ASC' }
@@ -151,6 +167,7 @@ export class InsumosService {
 
     return insumos;
   }
+
 
   async update(id: string, updateInsumoDto: UpdateInsumoDto, docente_id: string) {
     const insumo = await this.findOne(id);

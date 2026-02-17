@@ -11,6 +11,7 @@ import {
     EstadisticasRendimientoAnual
 } from '../interfaces/datos-rendimiento-anual.interface';
 import { calcularConversionCualitativa } from '../../common/constants/escalas.constants';
+import { EstadoMateria } from '../../materias/entities/materia.entity';
 
 @Injectable()
 export class ReporteRendimientoAnualService {
@@ -38,6 +39,10 @@ export class ReporteRendimientoAnualService {
 
         if (!materiaCurso) {
             throw new NotFoundException('Materia-curso no encontrada');
+        }
+
+        if (materiaCurso.materia.estado !== EstadoMateria.ACTIVO) {
+            throw new BadRequestException('No se puede generar reporte de una materia inactiva');
         }
 
         // 2. Validar período lectivo

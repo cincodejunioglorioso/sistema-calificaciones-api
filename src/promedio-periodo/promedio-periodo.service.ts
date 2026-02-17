@@ -16,7 +16,7 @@ import { calcularConversionCualitativa } from '../common/constants/escalas.const
 import { ResultadoGeneracionPeriodoMasiva } from './dto/resultado-generacion-masiva.interface';
 import { ConversionCualitativa } from '../common/enums/cualitativa.enum';
 import { EstadoEstudiante } from '../estudiantes/entities/estudiante.entity';
-import { TipoCalificacion } from '../materias/entities/materia.entity';
+import { EstadoMateria, TipoCalificacion } from '../materias/entities/materia.entity';
 
 @Injectable()
 export class PromedioPeriodoService {
@@ -213,6 +213,7 @@ export class PromedioPeriodoService {
     // Filtrar solo materias cuantitativas
     const materiasCuantitativas = materiasCurso.filter(
       mc => mc.materia.tipoCalificacion === TipoCalificacion.CUANTITATIVA
+      && mc.materia.estado === EstadoMateria.ACTIVO 
     );
 
     if (materiasCuantitativas.length === 0) {

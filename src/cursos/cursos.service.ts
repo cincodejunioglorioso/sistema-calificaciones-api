@@ -208,6 +208,20 @@ export class CursosService {
     return curso;
   }
 
+  // 🆕 Buscar curso donde el docente es tutor (optimizado para dashboard)
+  async findCursoTutorByDocente(docente_id: string, periodo_lectivo_id: string) {
+    const curso = await this.cursoRepository.findOne({
+      where: { 
+        docente_id,
+        periodo_lectivo_id,
+        estado: Not(EstadoCurso.INACTIVO) 
+      },
+      relations: ['periodo_lectivo']
+    });
+
+    return curso; // null si no es tutor de ningún curso
+  }
+
   // 👑 ADMIN: Actualizar curso
   async update(id: string, updateCursoDto: UpdateCursoDto) {
     const curso = await this.findOne(id);

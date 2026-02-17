@@ -8,7 +8,7 @@ import { DatosConcentradoCalificaciones, EstudianteConcentrado, CalificacionMate
 import { TrimestresService } from '../../trimestres/trimestres.service';
 import { calcularConversionCualitativa } from '../../common/constants/escalas.constants';
 import { NombreTrimestre } from '../../trimestres/entities/trimestre.entity';
-import { TipoCalificacion } from '../../materias/entities/materia.entity';
+import { EstadoMateria, TipoCalificacion } from '../../materias/entities/materia.entity';
 
 @Injectable()
 export class ReporteConcentradoService {
@@ -47,6 +47,7 @@ export class ReporteConcentradoService {
     // 🆕 FILTRAR SOLO MATERIAS CUANTITATIVAS
     const materiasCuantitativas = materiasCurso.filter(
       mc => mc.materia.tipoCalificacion === TipoCalificacion.CUANTITATIVA
+      && mc.materia.estado === EstadoMateria.ACTIVO
     );
 
     if (materiasCuantitativas.length === 0) {

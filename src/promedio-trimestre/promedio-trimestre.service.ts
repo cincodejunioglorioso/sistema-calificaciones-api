@@ -17,7 +17,7 @@ import { Insumo, EstadoInsumo } from '../insumos/entities/insumo.entity';
 import { ResultadoGeneracionMasiva, EstudianteIncompleto } from './dto/resultado-generacion-masiva.interface';
 import { calcularConversionCualitativa } from '../common/constants/escalas.constants';
 import { EstadoEstudiante } from '../estudiantes/entities/estudiante.entity';
-import { TipoCalificacion } from '../materias/entities/materia.entity';
+import { EstadoMateria, TipoCalificacion } from '../materias/entities/materia.entity';
 
 @Injectable()
 export class PromedioTrimestreService {
@@ -216,6 +216,7 @@ export class PromedioTrimestreService {
 
     const materiasCuantitativas = materiasCurso.filter(
       mc => mc.materia.tipoCalificacion === TipoCalificacion.CUANTITATIVA
+      && mc.materia.estado === EstadoMateria.ACTIVO
     );
 
     if (materiasCuantitativas.length === 0) {

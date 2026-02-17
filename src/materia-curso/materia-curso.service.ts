@@ -198,6 +198,7 @@ export class MateriaCursoService {
         totalMaterias: 0,
         materiasActivas: 0,
         materias: [],
+        cursoTutor: null, // 🆕 No hay curso tutor si no hay período activo
       };
     }
 
@@ -214,6 +215,12 @@ export class MateriaCursoService {
       },
     });
 
+    // 🆕 BUSCAR CURSO TUTOR (optimizado - una sola query)
+    const cursoTutor = await this.cursosService.findCursoTutorByDocente(
+      docente_id,
+      periodoActivo.id
+    );
+
     return {
       docente: {
         id: docente.id,
@@ -227,6 +234,7 @@ export class MateriaCursoService {
       totalMaterias: materias.length,
       materiasActivas: materias.filter((m) => m.estado === EstadoMateriaCurso.ACTIVO).length,
       materias,
+      cursoTutor, // 🆕 Incluido directamente desde el backend
     };
   }
 
@@ -385,6 +393,16 @@ export class MateriaCursoService {
       throw new BadRequestException('No se pueden eliminar asignaciones de períodos finalizados');
     }
 
+    // 🆕 Verificar si tiene datos asociados (insumos, calificaciones, promedios)
+    const tieneDatos = await this.verificarDatosAsociados(id);
+    if (tieneDatos) {
+      throw new BadRequestException(
+        `No se puede eliminar la materia "${materiaCurso.materia.nombre}" del curso ` +
+        `${materiaCurso.curso.nivel} ${materiaCurso.curso.paralelo} porque ya tiene ` +
+        `insumos o calificaciones registradas. Puede desasignar al docente en su lugar.`
+      );
+    }
+
     await this.materiaCursoRepository.delete(id);
 
     return {
@@ -422,6 +440,22 @@ export class MateriaCursoService {
       throw new BadRequestException('No se encontraron asignaciones para eliminar');
     }
 
+    // 🆕 Verificar que ninguna tenga datos asociados
+    const conDatos: string[] = [];
+    for (const mc of paraEliminar) {
+      const tieneDatos = await this.verificarDatosAsociados(mc.id);
+      if (tieneDatos) {
+        conDatos.push(`${mc.curso.nivel} ${mc.curso.paralelo}`);
+      }
+    }
+
+    if (conDatos.length > 0) {
+      throw new BadRequestException(
+        `No se puede eliminar la materia porque ya tiene datos en: ${conDatos.join(', ')}. ` +
+        `Puede desasignar a los docentes en su lugar.`
+      );
+    }
+
     // Eliminar todos
     await this.materiaCursoRepository.remove(paraEliminar);
 
@@ -432,6 +466,37 @@ export class MateriaCursoService {
     };
   }
 
+  /**
+   * 🆕 Verificar si una materia_curso tiene datos asociados
+   * (insumos, calificaciones de examen, promedios)
+   */
+  private async verificarDatosAsociados(materiaCursoId: string): Promise<boolean> {
+    // Verificar insumos
+    const insumos = await this.materiaCursoRepository.manager.count('insumos', {
+      where: { materia_curso_id: materiaCursoId }
+    });
+    if (insumos > 0) return true;
+
+    // Verificar calificaciones de examen
+    const examenes = await this.materiaCursoRepository.manager.count('calificacion_examen', {
+      where: { materia_curso_id: materiaCursoId }
+    });
+    if (examenes > 0) return true;
+
+    // Verificar promedios trimestre
+    const promedios = await this.materiaCursoRepository.manager.count('promedio_trimestre', {
+      where: { materia_curso_id: materiaCursoId }
+    });
+    if (promedios > 0) return true;
+
+    // Verificar promedios periodo
+    const promediosPeriodo = await this.materiaCursoRepository.manager.count('promedio_periodo', {
+      where: { materia_curso_id: materiaCursoId }
+    });
+    if (promediosPeriodo > 0) return true;
+
+    return false;
+  }
 
   /**
    * 🆕 AUTO-ASIGNAR COMPONENTES CUALITATIVOS AL TUTOR

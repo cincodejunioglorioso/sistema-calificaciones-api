@@ -5,12 +5,14 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Insumo } from './entities/insumo.entity';
 import { CalificacionInsumo } from '../calificacion_insumo/entities/calificacion_insumo.entity';
 import { MateriaCurso } from '../materia-curso/entities/materia-curso.entity';
+import { Trimestre } from '../trimestres/entities/trimestre.entity';
 
 @Module({
   imports: [TypeOrmModule.forFeature([
     Insumo,
     CalificacionInsumo,
-    MateriaCurso
+    MateriaCurso,
+    Trimestre
   ])],
   controllers: [InsumosController],
   providers: [InsumosService],
