@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, forwardRef, Inject, Injectable,
 import { CreateTrimestreDto } from './dto/create-trimestre.dto';
 import { UpdateTrimestreDto } from './dto/update-trimestre.dto';
 import { NombreTrimestre, Trimestre, TrimestreEstado } from './entities/trimestre.entity';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PeriodosLectivosService } from '../periodos-lectivos/periodos-lectivos.service';
 import { EstadoPeriodo, EstadoSupletorio } from '../periodos-lectivos/entities/periodos-lectivo.entity';
@@ -351,7 +351,6 @@ export class TrimestresService {
       problemas: string[];
     }> = new Map();
 
-    // ============ HELPER PARA AGREGAR PROBLEMA A DOCENTE ============
     const agregarProblemaDocente = (docenteId: string, nombreDocente: string, problema: string) => {
       if (!resumenDocentes.has(docenteId)) {
         resumenDocentes.set(docenteId, {
@@ -365,38 +364,46 @@ export class TrimestresService {
       }
     };
 
-    // ============ OBTENER CURSOS Y ESTUDIANTES ÚNICOS ============
+    // ============ 🔥 BATCH: Obtener cursos UNA VEZ ============
     const cursos = await this.cursoRepository.find({
       where: { periodo_lectivo_id: trimestre.periodo_lectivo_id },
       relations: ['docente']
     });
 
-    // ✅ CONTAR ESTUDIANTES ÚNICOS (NO MULTIPLICADO POR MATERIAS)
-    const estudiantesUnicos = new Set<string>();
-    const estudiantesInactivosUnicos = new Set<string>();
+    const cursosIds = cursos.map(c => c.id);
 
-    for (const curso of cursos) {
-      const matriculas = await this.matriculaRepository.find({
+    // ============ 🔥 BATCH: Todas las matrículas activas de UNA VEZ ============
+    const todasMatriculas = cursosIds.length > 0
+      ? await this.matriculaRepository.find({
         where: {
-          curso_id: curso.id,
+          curso_id: In(cursosIds),
           estado: EstadoMatricula.ACTIVO
         },
         relations: ['estudiante']
-      });
+      })
+      : [];
 
-      matriculas.forEach(m => {
-        if (m.estudiante.estado === EstadoEstudiante.INACTIVO_TEMPORAL) {
-          estudiantesInactivosUnicos.add(m.estudiante_id);
-        } else {
-          estudiantesUnicos.add(m.estudiante_id);
+    // Crear maps para acceso rápido
+    const matriculasPorCurso = new Map<string, Matricula[]>();
+    const estudiantesUnicos = new Set<string>();
+    const estudiantesInactivosUnicos = new Set<string>();
+
+    for (const m of todasMatriculas) {
+      if (m.estudiante.estado === EstadoEstudiante.INACTIVO_TEMPORAL) {
+        estudiantesInactivosUnicos.add(m.estudiante_id);
+      } else {
+        estudiantesUnicos.add(m.estudiante_id);
+        if (!matriculasPorCurso.has(m.curso_id)) {
+          matriculasPorCurso.set(m.curso_id, []);
         }
-      });
+        matriculasPorCurso.get(m.curso_id)!.push(m);
+      }
     }
 
     const total_estudiantes = estudiantesUnicos.size;
     const estudiantes_inactivos = estudiantesInactivosUnicos.size;
 
-    // ============ VALIDAR MATERIAS-CURSO ============
+    // ============ 🔥 BATCH: Todas las materias-curso de UNA VEZ ============
     const materiasCurso = await this.materiaCursoRepository.find({
       where: {
         curso: { periodo_lectivo_id: trimestre.periodo_lectivo_id }
@@ -404,33 +411,66 @@ export class TrimestresService {
       relations: ['curso', 'materia', 'docente']
     });
 
-    // ✅ FILTRAR SOLO MATERIAS CUANTITATIVAS (excluir cualitativas)
     const materiasCuantitativas = materiasCurso.filter(
       mc => mc.materia.tipoCalificacion === 'CUANTITATIVA'
     );
 
-    for (const materiaCurso of materiasCuantitativas) {
-      // Obtener estudiantes matriculados ACTIVOS
-      const matriculas = await this.matriculaRepository.find({
-        where: {
-          curso_id: materiaCurso.curso_id,
-          estado: EstadoMatricula.ACTIVO
-        },
-        relations: ['estudiante']
-      });
+    // ============ 🔥 BATCH: Todos los insumos del trimestre de UNA VEZ ============
+    const materiasIds = materiasCuantitativas.map(mc => mc.id);
 
-      const matriculasActivas = matriculas.filter(
-        m => m.estudiante.estado !== EstadoEstudiante.INACTIVO_TEMPORAL
-      );
-
-      // 1️⃣ VALIDAR INSUMOS
-      const insumos = await this.insumoRepository.find({
+    const todosInsumos = materiasIds.length > 0
+      ? await this.insumoRepository.find({
         where: {
-          materia_curso_id: materiaCurso.id,
+          materia_curso_id: In(materiasIds),
           trimestre_id: trimestre_id
         }
-      });
+      })
+      : [];
 
+    const insumosPorMateria = new Map<string, Insumo[]>();
+    for (const ins of todosInsumos) {
+      if (!insumosPorMateria.has(ins.materia_curso_id)) {
+        insumosPorMateria.set(ins.materia_curso_id, []);
+      }
+      insumosPorMateria.get(ins.materia_curso_id)!.push(ins);
+    }
+
+    // ============ 🔥 BATCH: Todos los exámenes del trimestre de UNA VEZ ============
+    const todosExamenes = materiasIds.length > 0
+      ? await this.calificacionExamenRepository.find({
+        where: {
+          materia_curso_id: In(materiasIds),
+          trimestre_id: trimestre_id
+        },
+        select: ['estudiante_id', 'materia_curso_id']
+      })
+      : [];
+
+    const examenesSet = new Set(
+      todosExamenes.map(e => `${e.estudiante_id}:${e.materia_curso_id}`)
+    );
+
+    // ============ 🔥 BATCH: Todos los proyectos del trimestre de UNA VEZ ============
+    const todosProyectos = cursosIds.length > 0
+      ? await this.calificacionProyectoRepository.find({
+        where: {
+          curso_id: In(cursosIds),
+          trimestre_id: trimestre_id
+        },
+        select: ['estudiante_id', 'curso_id']
+      })
+      : [];
+
+    const proyectosSet = new Set(
+      todosProyectos.map(p => `${p.estudiante_id}:${p.curso_id}`)
+    );
+
+    // ============ VALIDAR MATERIAS-CURSO (en memoria) ============
+    for (const materiaCurso of materiasCuantitativas) {
+      const matriculasDelCurso = matriculasPorCurso.get(materiaCurso.curso_id) || [];
+
+      // 1️⃣ VALIDAR INSUMOS
+      const insumos = insumosPorMateria.get(materiaCurso.id) || [];
       const insumosNoPublicados = insumos.filter(i =>
         i.estado !== EstadoInsumo.PUBLICADO &&
         i.estado !== EstadoInsumo.CERRADO
@@ -451,21 +491,10 @@ export class TrimestresService {
         });
       }
 
-      // 2️⃣ VALIDAR EXÁMENES
-      const estudiantesSinExamen: string[] = [];
-      for (const matricula of matriculasActivas) {
-        const examen = await this.calificacionExamenRepository.findOne({
-          where: {
-            estudiante_id: matricula.estudiante_id,
-            materia_curso_id: materiaCurso.id,
-            trimestre_id: trimestre_id
-          }
-        });
-
-        if (!examen) {
-          estudiantesSinExamen.push(matricula.estudiante.nombres_completos);
-        }
-      }
+      // 2️⃣ VALIDAR EXÁMENES (desde el Set, sin queries)
+      const estudiantesSinExamen = matriculasDelCurso.filter(
+        m => !examenesSet.has(`${m.estudiante_id}:${materiaCurso.id}`)
+      );
 
       if (estudiantesSinExamen.length > 0 && materiaCurso.docente_id) {
         agregarProblemaDocente(
@@ -484,33 +513,16 @@ export class TrimestresService {
       }
     }
 
-    // 3️⃣ VALIDAR PROYECTOS (por curso, una sola vez)
+    // 3️⃣ VALIDAR PROYECTOS (desde el Set, sin queries)
     const cursosValidados = new Set<string>();
     for (const curso of cursos) {
       if (cursosValidados.has(curso.id)) continue;
       cursosValidados.add(curso.id);
 
-      const matriculas = await this.matriculaRepository.find({
-        where: {
-          curso_id: curso.id,
-          estado: EstadoMatricula.ACTIVO
-        },
-        relations: ['estudiante']
-      });
+      const matriculasDelCurso = matriculasPorCurso.get(curso.id) || [];
 
-      const matriculasActivas = matriculas.filter(
-        m => m.estudiante.estado !== EstadoEstudiante.INACTIVO_TEMPORAL
-      );
-
-      const proyectos = await this.calificacionProyectoRepository.find({
-        where: {
-          curso_id: curso.id,
-          trimestre_id: trimestre_id
-        }
-      });
-
-      const estudiantesSinProyecto = matriculasActivas.filter(m =>
-        !proyectos.some(p => p.estudiante_id === m.estudiante_id)
+      const estudiantesSinProyecto = matriculasDelCurso.filter(
+        m => !proyectosSet.has(`${m.estudiante_id}:${curso.id}`)
       );
 
       if (estudiantesSinProyecto.length > 0 && curso.docente_id) {
@@ -530,7 +542,7 @@ export class TrimestresService {
       }
 
       // 4️⃣ VALIDAR COMPONENTES CUALITATIVOS (SOLO SI HAY TUTOR)
-      if (!curso.docente_id) continue; // ✅ Skip si no hay tutor asignado
+      if (!curso.docente_id) continue;
 
       const nivelesBasicos = ['OCTAVO', 'NOVENO', 'DECIMO'];
       const nivelEducativo = nivelesBasicos.includes(curso.nivel)
@@ -540,7 +552,6 @@ export class TrimestresService {
       const componentesCualitativos = await this.calificacionCualitativaService.obtenerComponentesPorNivel(nivelEducativo);
 
       if (componentesCualitativos.length > 0) {
-        // ✅ OBTENER TODAS LAS CALIFICACIONES DE UNA VEZ
         const todasCalificaciones = await this.calificacionCualitativaService.findByCursoYTrimestre(
           curso.id,
           trimestre_id
@@ -548,18 +559,15 @@ export class TrimestresService {
 
         const estudiantesSinComponentes: string[] = [];
 
-        for (const matricula of matriculasActivas) {
-          // Calificaciones de este estudiante
+        for (const matricula of matriculasDelCurso) {
           const calificacionesDelEstudiante = todasCalificaciones.filter(
             cal => cal.estudiante_id === matricula.estudiante_id
           );
 
-          // Verificar si tiene TODAS las calificaciones (con valor !== null)
           const componentesCalificados = calificacionesDelEstudiante.filter(
             cal => cal.calificacion !== null
           ).length;
 
-          // ✅ DEBE TENER tantas calificaciones como componentes existen
           if (componentesCalificados < componentesCualitativos.length) {
             estudiantesSinComponentes.push(matricula.estudiante.nombres_completos);
           }
@@ -583,22 +591,7 @@ export class TrimestresService {
       }
     }
 
-    // ✅ CALCULAR ESTUDIANTES COMPLETOS CORRECTAMENTE
-    // Un estudiante está completo si NO aparece en ningún error
-    const estudiantesConErrores = new Set<string>();
-
-    errores.forEach(error => {
-      // Los errores ya tienen la cantidad de estudiantes afectados
-      // pero no tenemos los IDs, solo contamos
-      if (error.tipo === 'ESTUDIANTE_SIN_EXAMEN' ||
-        error.tipo === 'ESTUDIANTE_SIN_PROYECTO' ||
-        error.tipo === 'COMPONENTE_CUALITATIVO_SIN_CALIFICAR') {
-        // Aproximación: asumimos que cada error afecta a diferentes estudiantes
-        // En realidad deberíamos rastrear los IDs
-      }
-    });
-
-    // Por simplicidad, calculamos como: total - suma de cantidades únicas
+    // ✅ CALCULAR ESTUDIANTES COMPLETOS
     const totalErrores = errores.reduce((acc, e) => {
       if (e.tipo === 'ESTUDIANTE_SIN_EXAMEN' ||
         e.tipo === 'ESTUDIANTE_SIN_PROYECTO' ||
@@ -608,13 +601,11 @@ export class TrimestresService {
       return acc;
     }, 0);
 
-    // Esto puede duplicar, necesitamos mejor lógica
     const estudiantes_incompletos = Math.min(totalErrores, total_estudiantes);
     const estudiantes_completos = total_estudiantes - estudiantes_incompletos;
 
     const puede_cerrar = errores.length === 0;
 
-    // ✅ CONSTRUIR RESUMEN SIMPLIFICADO POR DOCENTE
     const resumenSimplificado = Array.from(resumenDocentes.entries()).map(([id, data]) => ({
       docente_id: id,
       docente_nombre: data.nombre,

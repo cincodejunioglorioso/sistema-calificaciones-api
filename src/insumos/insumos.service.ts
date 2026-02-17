@@ -254,38 +254,27 @@ export class InsumosService {
   }
 
   async cerrarInsumosDeTrimestre(trimestre_id: string) {
-    const insumos = await this.insumoRepository.find({
-      where: { trimestre_id }
-    });
+    const result = await this.insumoRepository
+      .createQueryBuilder()
+      .update(Insumo)
+      .set({ estado: EstadoInsumo.CERRADO })
+      .where('trimestre_id = :trimestre_id', { trimestre_id })
+      .andWhere('estado != :estado', { estado: EstadoInsumo.CERRADO })
+      .execute();
 
-    for (const insumo of insumos) {
-      if (insumo.estado !== EstadoInsumo.CERRADO) {
-        insumo.estado = EstadoInsumo.CERRADO;
-        await this.insumoRepository.save(insumo);
-      }
-    }
-
-    return { cantidad: insumos.length };
+    return { cantidad: result.affected || 0 };
   }
 
   async reabrirInsumosDeTrimestre(trimestre_id: string) {
-    const insumos = await this.insumoRepository.find({
-      where: {
-        trimestre_id,
-        estado: EstadoInsumo.CERRADO
-      }
-    });
+    const result = await this.insumoRepository
+      .createQueryBuilder()
+      .update(Insumo)
+      .set({ estado: EstadoInsumo.PUBLICADO })
+      .where('trimestre_id = :trimestre_id', { trimestre_id })
+      .andWhere('estado = :estado', { estado: EstadoInsumo.CERRADO })
+      .execute();
 
-    let reabiertos = 0;
-    for (const insumo of insumos) {
-      insumo.estado = EstadoInsumo.PUBLICADO;
-      await this.insumoRepository.save(insumo);
-      reabiertos++;
-    }
-
-    return {
-      cantidad: reabiertos
-    };
+    return { cantidad: result.affected || 0 };
   }
 
   async cambiarEstadoAActivo(id: string) {
