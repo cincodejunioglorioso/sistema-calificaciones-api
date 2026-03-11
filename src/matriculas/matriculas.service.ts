@@ -16,7 +16,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { EstadoCurso } from '../cursos/entities/curso.entity';
 import { EstadoPeriodo } from '../periodos-lectivos/entities/periodos-lectivo.entity';
-import { EstadoEstudiante } from '../estudiantes/entities/estudiante.entity';
+import { EstadoEstudiante, Estudiante } from '../estudiantes/entities/estudiante.entity';
 
 @Injectable()
 export class MatriculasService {
@@ -260,7 +260,6 @@ export class MatriculasService {
 
     const registros = await this.cacheManager.get<RegistroImportacionDto[]>(previewId);
 
-
     if (!registros) {
       throw new BadRequestException('No se encontraron datos de previsualización. El preview_id puede haber expirado.');
     }
@@ -285,28 +284,117 @@ export class MatriculasService {
       }
     };
 
-    // 🔄 PROCESAR EN LOTES DE 50
-    const lotes = this.dividirEnLotes(registrosValidos, 50);
+    // 🔥 OPTIMIZACIÓN: Usar transacción + batch processing
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    for (const lote of lotes) {
-      for (const registro of lote) {
-        try {
-          if (!registro.curso_id) {
-            throw new Error('Curso no encontrado');
-          }
+    try {
+      // 1️⃣ BATCH: Validar período una sola vez
+      const periodo = await this.periodosLectivosService.findOne(periodoId);
+      if (periodo.estado !== EstadoPeriodo.ACTIVO) {
+        throw new BadRequestException(`El período lectivo ${periodo.nombre} no está activo`);
+      }
 
-          // Crear DTO de matrícula
-          const createDto: CreateMatriculaDto = {
+      // 2️⃣ BATCH: Obtener todos los cursos necesarios de una vez
+      const cursosIdsUnicos = [...new Set(registrosValidos.map(r => r.curso_id!))];
+      const cursosMap = new Map<string, any>();
+      for (const cursoId of cursosIdsUnicos) {
+        const curso = await this.cursosService.findOne(cursoId);
+        cursosMap.set(cursoId, curso);
+      }
+
+      // 3️⃣ BATCH: Obtener todas las cédulas para buscar estudiantes existentes
+      const cedulasUnicas = [...new Set(registrosValidos.map(r => r.cedula))];
+      const estudiantesExistentes = await this.dataSource
+        .getRepository(Estudiante)
+        .createQueryBuilder('e')
+        .where('e.estudiante_cedula IN (:...cedulas)', { cedulas: cedulasUnicas })
+        .getMany();
+
+      const estudiantesPorCedula = new Map(
+        estudiantesExistentes.map(e => [e.estudiante_cedula, e])
+      );
+
+      // 4️⃣ BATCH: Obtener matrículas activas existentes en este período
+      const matriculasExistentes = await this.matriculaRepository
+        .createQueryBuilder('m')
+        .where('m.periodo_lectivo_id = :periodoId', { periodoId })
+        .andWhere('m.estado = :estado', { estado: EstadoMatricula.ACTIVO })
+        .getMany();
+
+      const matriculasExistentesSet = new Set(
+        matriculasExistentes.map(m => `${m.estudiante_id}:${m.periodo_lectivo_id}`)
+      );
+
+      // 5️⃣ BATCH: Generar números de matrícula secuenciales
+      const anio = new Date(periodo.fechaInicio).getFullYear();
+      const countExistentes = await this.matriculaRepository.count({
+        where: { periodo_lectivo_id: periodoId }
+      });
+      let secuencial = countExistentes + 1;
+
+      // 6️⃣ PROCESAR: Crear estudiantes nuevos en batch
+      const estudiantesACrear: Estudiante[] = [];
+      for (const registro of registrosValidos) {
+        if (!estudiantesPorCedula.has(registro.cedula)) {
+          const nuevoEstudiante = this.dataSource.getRepository(Estudiante).create({
             estudiante_cedula: registro.cedula,
             nombres_completos: registro.nombres_completos,
             estudiante_email: registro.correo || undefined,
-            curso_id: registro.curso_id,
-            periodo_lectivo_id: periodoId,
-            origen: OrigenMatricula.DISTRITO
-          };
+            datos_completos: false,
+            estado: EstadoEstudiante.SIN_MATRICULA
+          });
+          estudiantesACrear.push(nuevoEstudiante);
+        }
+      }
 
-          // Crear matrícula (genera numero_matricula automáticamente)
-          await this.create(createDto);
+      // INSERT batch de estudiantes (lotes de 100)
+      if (estudiantesACrear.length > 0) {
+        const lotesEstudiantes = this.dividirEnLotes(estudiantesACrear, 100);
+        for (const lote of lotesEstudiantes) {
+          const saved = await queryRunner.manager.save(Estudiante, lote);
+          saved.forEach(e => estudiantesPorCedula.set(e.estudiante_cedula, e));
+        }
+      }
+
+      // 7️⃣ PROCESAR: Crear matrículas en batch
+      const matriculasACrear: Matricula[] = [];
+      const contadoresPorCurso = new Map<string, number>();
+
+      for (const registro of registrosValidos) {
+        try {
+          const estudiante = estudiantesPorCedula.get(registro.cedula);
+          if (!estudiante) {
+            throw new Error('Estudiante no encontrado después de creación batch');
+          }
+
+          // Verificar duplicado
+          const claveUnica = `${estudiante.id}:${periodoId}`;
+          if (matriculasExistentesSet.has(claveUnica)) {
+            throw new Error('Ya tiene matrícula activa en este período');
+          }
+
+          const numeroMatricula = `${anio}-${secuencial.toString().padStart(4, '0')}`;
+          secuencial++;
+
+          const matricula = this.matriculaRepository.create({
+            numero_de_matricula: numeroMatricula,
+            estudiante_id: estudiante.id,
+            curso_id: registro.curso_id!,
+            periodo_lectivo_id: periodoId,
+            origen: OrigenMatricula.DISTRITO,
+            estado: EstadoMatricula.ACTIVO
+          });
+
+          matriculasACrear.push(matricula);
+          matriculasExistentesSet.add(claveUnica);
+
+          // Contar para actualizar contadores después
+          contadoresPorCurso.set(
+            registro.curso_id!,
+            (contadoresPorCurso.get(registro.curso_id!) || 0) + 1
+          );
 
           resultado.exitosas++;
           resultado.detalles.push({
@@ -326,15 +414,54 @@ export class MatriculasService {
           });
         }
       }
+
+      // INSERT batch de matrículas (lotes de 100)
+      if (matriculasACrear.length > 0) {
+        const lotesMatriculas = this.dividirEnLotes(matriculasACrear, 100);
+        for (const lote of lotesMatriculas) {
+          await queryRunner.manager.save(Matricula, lote);
+        }
+      }
+
+      // 8️⃣ BATCH: Actualizar estado de estudiantes nuevos a ACTIVO
+      const idsEstudiantesNuevos = estudiantesACrear
+        .map(e => estudiantesPorCedula.get(e.estudiante_cedula)?.id)
+        .filter(Boolean);
+
+      if (idsEstudiantesNuevos.length > 0) {
+        const lotesIds = this.dividirEnLotes(idsEstudiantesNuevos as string[], 500);
+        for (const lote of lotesIds) {
+          await queryRunner.manager
+            .createQueryBuilder()
+            .update('estudiantes')
+            .set({ estado: EstadoEstudiante.ACTIVO })
+            .whereInIds(lote)
+            .execute();
+        }
+      }
+
+      await queryRunner.commitTransaction();
+
+      // 9️⃣ FUERA DE TRANSACCIÓN: Actualizar contadores de cursos
+      for (const [cursoId] of contadoresPorCurso) {
+        await this.actualizarContadorCurso(cursoId);
+      }
+
+      resultado.resumen.registros_importados = resultado.exitosas;
+      resultado.resumen.registros_fallidos = resultado.fallidas;
+
+      await this.cacheManager.del(previewId);
+
+      return resultado;
+
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
-
-    resultado.resumen.registros_importados = resultado.exitosas;
-    resultado.resumen.registros_fallidos = resultado.fallidas;
-
-    await this.cacheManager.del(previewId);
-
-    return resultado;
   }
+
 
   async findAll() {
     const matriculas = await this.matriculaRepository.find({
@@ -641,23 +768,6 @@ export class MatriculasService {
     }
   }
 
-  private async generarNumeroMatricula(periodoLectivoId: string): Promise<string> {
-    // 1. Obtener el año del período lectivo
-    const periodo = await this.periodosLectivosService.findOne(periodoLectivoId);
-    const anio = new Date(periodo.fechaInicio).getFullYear();
-
-    // 2. Contar matrículas existentes en ese período
-    const count = await this.matriculaRepository.count({
-      where: { periodo_lectivo_id: periodoLectivoId }
-    });
-
-    // 3. Generar número secuencial (siguiente al último)
-    const numeroSecuencial = (count + 1).toString().padStart(4, '0');
-
-    // 4. Retornar formato: AAAA-NNNN
-    return `${anio}-${numeroSecuencial}`;
-  }
-
   private async actualizarContadorCurso(cursoId: string): Promise<void> {
     const count = await this.matriculaRepository.count({
       where: {
@@ -667,6 +777,22 @@ export class MatriculasService {
     });
 
     await this.cursosService.actualizarContadorEstudiantes(cursoId, count);
+  }
+
+  private async generarNumeroMatricula(periodoLectivoId: string): Promise<string> {
+    const periodo = await this.periodosLectivosService.findOne(periodoLectivoId);
+    const anio = new Date(periodo.fechaInicio).getFullYear();
+
+    // 🔥 Usar query atómica con lock
+    const result = await this.matriculaRepository
+      .createQueryBuilder('m')
+      .select('COUNT(*)', 'count')
+      .where('m.periodo_lectivo_id = :periodoLectivoId', { periodoLectivoId })
+      .setLock('pessimistic_write')
+      .getRawOne();
+
+    const numeroSecuencial = (parseInt(result.count) + 1).toString().padStart(4, '0');
+    return `${anio}-${numeroSecuencial}`;
   }
 
   private dividirEnLotes<T>(array: T[], tamanioLote: number): T[][] {
