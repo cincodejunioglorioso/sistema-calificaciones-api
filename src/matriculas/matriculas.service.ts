@@ -546,7 +546,11 @@ export class MatriculasService {
 
   async update(id: string, updateMatriculaDto: UpdateMatriculaDto) {
     // ✅ USAR TRANSACCIÓN PARA GARANTIZAR CONSISTENCIA
-    return await this.dataSource.transaction(async (manager) => {
+    let debeActualizarContadores = false;
+    let cursoAnteriorId: string | null = null;
+    let cursoNuevoId: string | null = null;
+
+    await this.dataSource.transaction(async (manager) => {
       // 1️⃣ Buscar la matrícula SIN relaciones (solo IDs)
       const matricula = await manager.findOne(Matricula, {
         where: { id },
@@ -557,8 +561,7 @@ export class MatriculasService {
         throw new NotFoundException(`Matrícula con ID ${id} no encontrada`);
       }
 
-      let debeActualizarContadores = false;
-      const cursoAnteriorId = matricula.curso_id;
+      cursoAnteriorId = matricula.curso_id;
 
       // 2️⃣ CAMBIO DE CURSO
       if (updateMatriculaDto.curso_id && updateMatriculaDto.curso_id !== matricula.curso_id) {
@@ -578,6 +581,7 @@ export class MatriculasService {
         await manager.update(Matricula, { id }, { curso_id: updateMatriculaDto.curso_id });
 
         debeActualizarContadores = true;
+        cursoNuevoId = updateMatriculaDto.curso_id;
       }
 
       // 3️⃣ ACTUALIZAR DATOS DEL ESTUDIANTE
@@ -635,17 +639,14 @@ export class MatriculasService {
       if (Object.keys(updateData).length > 0) {
         await manager.update(Matricula, { id }, updateData);
       }
-
-      // 5️⃣ ACTUALIZAR CONTADORES FUERA DE LA TRANSACCIÓN
-      if (debeActualizarContadores) {
-        // Ejecutar después de la transacción
-        await this.actualizarContadorCurso(cursoAnteriorId);
-        await this.actualizarContadorCurso(updateMatriculaDto.curso_id!);
-      }
-
-      // 6️⃣ RETORNAR DATOS ACTUALIZADOS
-      return await this.findOne(id, false);
     });
+
+    if (debeActualizarContadores && cursoAnteriorId && cursoNuevoId) {
+      await this.actualizarContadorCurso(cursoAnteriorId);
+      await this.actualizarContadorCurso(cursoNuevoId);
+    }
+
+    return await this.findOne(id, false);
   }
 
   async reactivar(id: string) {
@@ -783,12 +784,10 @@ export class MatriculasService {
     const periodo = await this.periodosLectivosService.findOne(periodoLectivoId);
     const anio = new Date(periodo.fechaInicio).getFullYear();
 
-    // 🔥 Usar query atómica con lock
     const result = await this.matriculaRepository
       .createQueryBuilder('m')
       .select('COUNT(*)', 'count')
       .where('m.periodo_lectivo_id = :periodoLectivoId', { periodoLectivoId })
-      .setLock('pessimistic_write')
       .getRawOne();
 
     const numeroSecuencial = (parseInt(result.count) + 1).toString().padStart(4, '0');
