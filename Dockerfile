@@ -1,7 +1,7 @@
 # ================================
 # Development Stage
 # ================================
-FROM node:20-alpine AS development
+FROM node:22.13-alpine AS development
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
@@ -26,7 +26,7 @@ CMD ["pnpm", "run", "start:dev"]
 # ================================
 # Build Stage
 # ================================
-FROM node:20-alpine AS build
+FROM node:22.13-alpine AS build
 
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
@@ -46,7 +46,7 @@ RUN pnpm prune --prod
 # ================================
 # Production Stage
 # ================================
-FROM node:20-alpine AS production
+FROM node:22.13-alpine AS production
 
 WORKDIR /app
 
