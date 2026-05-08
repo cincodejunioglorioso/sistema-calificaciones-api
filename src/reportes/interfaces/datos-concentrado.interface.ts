@@ -1,12 +1,15 @@
-// nest-backend/src/reportes/interfaces/datos-concentrado.interface.ts
-import { ConversionCualitativa } from '../../common/enums/cualitativa.enum';
+import { CalificacionComponente, ConversionCualitativa } from '../../common/enums/cualitativa.enum';
 import { EspecialidadCurso, NivelCurso } from '../../cursos/entities/curso.entity';
+import { TipoCalificacion } from '../../materias/entities/materia.entity';
 import { NombreTrimestre } from '../../trimestres/entities/trimestre.entity';
 
 export interface CalificacionMateriaConcentrado {
   materia_nombre: string;
-  nota_final: number;
-  cualitativa: ConversionCualitativa;
+  tipo_calificacion: TipoCalificacion;
+  nota_final: number | null;
+  conversion_cuantitativa: ConversionCualitativa | null; // para materias cuantitativas
+  calificacion_cualitativa: CalificacionComponente | null; // para materias cualitativas
+  valor_mostrar: string;
 }
 
 export interface EstudianteConcentrado {
@@ -20,7 +23,15 @@ export interface EstudianteConcentrado {
 // 🆕 Interface para promedios por materia del curso
 export interface PromedioMateriaCurso {
   materia_nombre: string;
-  promedio_materia: number;
+  tipo_calificacion: TipoCalificacion;
+  promedio_materia: number | null; // solo cuantitativas
+  moda_cualitativa: CalificacionComponente | null; // solo cualitativas
+  valor_mostrar: string;
+}
+
+export interface MateriaOrdenConcentrado {
+  materia_nombre: string;
+  tipo_calificacion: TipoCalificacion;
 }
 
 export interface DatosConcentradoCalificaciones {
@@ -46,7 +57,7 @@ export interface DatosConcentradoCalificaciones {
     apellidos: string;
   };
   
-  materias_orden: string[];
+  materias_orden: MateriaOrdenConcentrado[];
   estudiantes: EstudianteConcentrado[];
   
   // 🆕 Promedios del curso

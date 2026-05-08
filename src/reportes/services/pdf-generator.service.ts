@@ -2071,22 +2071,17 @@ export class PdfGeneratorService {
     }
 
     private dibujarTablaConcentrado(doc: PDFKit.PDFDocument, datos: DatosConcentradoCalificaciones) {
-        // 1. Configuraciones iniciales
         const { width: pageWidth, height: pageHeight } = doc.page;
         const marginLeft = 20, marginRight = 20, marginBottom = 80;
         let currentY = 130;
         const tableWidth = pageWidth - marginLeft - marginRight;
 
-        // 2. Cálculo dinámico de anchos basado en DATOS REALES
         const numMaterias = datos.materias_orden.length;
         const rankingWidth = 30, nombreWidth = 150, promedioWidth = 40, cualitativaWidth = 35;
-
-        // Si no hay materias, evitamos división por cero
         const materiaWidth = numMaterias > 0
             ? (tableWidth - rankingWidth - nombreWidth - promedioWidth - cualitativaWidth) / numMaterias
             : 0;
 
-        // 3. Función auxiliar para celdas (Mantiene consistencia de estilo)
         const drawCell = (x: number, y: number, w: number, h: number, text: string, bgColor: string, isBold = false, align: 'center' | 'left' = 'center') => {
             doc.rect(x, y, w, h).fillAndStroke(bgColor, '#333');
             doc.font(isBold ? 'Helvetica-Bold' : 'Helvetica')
@@ -2095,7 +2090,6 @@ export class PdfGeneratorService {
                 .text(text || '', x + 2, y + (h / 2) - 3, { width: w - 4, align: align });
         };
 
-        // 4. Función para redibujar encabezados (Se llama al inicio y en cada addPage)
         const imprimirEncabezados = (y: number) => {
             const hHeight = 60;
             let xP = marginLeft;
@@ -2105,11 +2099,10 @@ export class PdfGeneratorService {
             drawCell(xP, y, nombreWidth, hHeight, 'APELLIDOS Y NOMBRES', '#F2F2F2', true);
             xP += nombreWidth;
 
-            datos.materias_orden.forEach((materia, index) => {
+            datos.materias_orden.forEach((materiaCol, index) => {
                 const color = index % 2 === 0 ? '#E8F4FD' : '#FEF9E7';
                 doc.rect(xP, y, materiaWidth, hHeight).fillAndStroke(color, '#333');
-                // Usamos tu método existente para rotar el nombre de la materia
-                this.dibujarTextoRotado(doc, materia.toUpperCase(), xP, y, materiaWidth, hHeight);
+                this.dibujarTextoRotado(doc, materiaCol.materia_nombre.toUpperCase(), xP, y, materiaWidth, hHeight);
                 xP += materiaWidth;
             });
 
@@ -2120,14 +2113,11 @@ export class PdfGeneratorService {
             return y + hHeight;
         };
 
-        // ============ RENDERIZADO INICIAL ============
         currentY = imprimirEncabezados(currentY);
 
-        // ============ FILAS DE ESTUDIANTES (DATOS REALES) ============
         const rowHeight = 12;
 
         datos.estudiantes.forEach((estudiante, index) => {
-            // Control de salto de página
             if (currentY + rowHeight > pageHeight - marginBottom) {
                 doc.addPage({ size: 'A4', layout: 'landscape', margins: { top: 20, bottom: 20, left: 20, right: 20 } });
                 currentY = 40;
@@ -2137,25 +2127,25 @@ export class PdfGeneratorService {
             const rowBg = index % 2 === 0 ? '#FFFFFF' : '#F9F9F9';
             let xPos = marginLeft;
 
-            // Ranking y Nombre
             drawCell(xPos, currentY, rankingWidth, rowHeight, estudiante.ranking.toString(), rowBg);
             xPos += rankingWidth;
             drawCell(xPos, currentY, nombreWidth, rowHeight, estudiante.nombres_completos, rowBg, false, 'left');
             xPos += nombreWidth;
 
-            // Notas por Materia (Siguiendo el orden de materias_orden)
-            datos.materias_orden.forEach((materiaNombre, idx) => {
+            datos.materias_orden.forEach((materiaCol, idx) => {
                 const cellColor = idx % 2 === 0 ? '#F4FAFF' : '#FFFDF5';
 
-                // Buscamos la calificación que coincida con el nombre de la materia
-                const calif = estudiante.calificaciones_materias.find(c => c.materia_nombre === materiaNombre);
-                const notaTexto = calif && calif.nota_final > 0 ? calif.nota_final.toFixed(2) : '-';
+                const calif = estudiante.calificaciones_materias.find(c =>
+                    c.materia_nombre === materiaCol.materia_nombre &&
+                    c.tipo_calificacion === materiaCol.tipo_calificacion
+                );
 
-                drawCell(xPos, currentY, materiaWidth, rowHeight, notaTexto, cellColor);
+                const valorTexto = calif?.valor_mostrar ?? '-';
+
+                drawCell(xPos, currentY, materiaWidth, rowHeight, valorTexto, cellColor);
                 xPos += materiaWidth;
             });
 
-            // Totales del Estudiante
             drawCell(xPos, currentY, promedioWidth, rowHeight, estudiante.promedio_general.toFixed(2), rowBg, true);
             xPos += promedioWidth;
             drawCell(xPos, currentY, cualitativaWidth, rowHeight, estudiante.cualitativa_general, rowBg);
@@ -2163,10 +2153,8 @@ export class PdfGeneratorService {
             currentY += rowHeight;
         });
 
-        // ============ FILA DE PROMEDIOS DEL CURSO ============
-        // Verificamos si hay espacio para el pie de tabla
         if (currentY + rowHeight > pageHeight - marginBottom) {
-            doc.addPage({ size: 'LEGAL', layout: 'landscape' });
+            doc.addPage({ size: 'A4', layout: 'landscape', margins: { top: 20, bottom: 20, left: 20, right: 20 } });
             currentY = 40;
             currentY = imprimirEncabezados(currentY);
         }
@@ -2174,24 +2162,25 @@ export class PdfGeneratorService {
         let xFinal = marginLeft;
         const footerColor = '#D5F5E3';
 
-        // Celda de etiqueta "PROMEDIOS"
         drawCell(xFinal, currentY, rankingWidth + nombreWidth, rowHeight, 'PROMEDIOS GENERALES', footerColor, true, 'left');
         xFinal += (rankingWidth + nombreWidth);
 
-        // Promedios por materia
-        datos.materias_orden.forEach((materiaNombre) => {
-            const promMateria = datos.promedios_curso.find(p => p.materia_nombre === materiaNombre);
-            const promTexto = promMateria && promMateria.promedio_materia > 0 ? promMateria.promedio_materia.toFixed(2) : '-';
+        datos.materias_orden.forEach((materiaCol) => {
+            const promMateria = datos.promedios_curso.find(p =>
+                p.materia_nombre === materiaCol.materia_nombre &&
+                p.tipo_calificacion === materiaCol.tipo_calificacion
+            );
 
+            const promTexto = promMateria?.valor_mostrar ?? '-';
             drawCell(xFinal, currentY, materiaWidth, rowHeight, promTexto, footerColor, true);
             xFinal += materiaWidth;
         });
 
-        // Promedio y Cualitativa Final del Curso
         drawCell(xFinal, currentY, promedioWidth, rowHeight, datos.promedio_general_curso.toFixed(2), footerColor, true);
         xFinal += promedioWidth;
         drawCell(xFinal, currentY, cualitativaWidth, rowHeight, datos.cualitativa_general_curso, footerColor, true);
     }
+    // ...existing code...
 
     private dibujarFirmaConcentrado(doc: PDFKit.PDFDocument, datos: DatosConcentradoCalificaciones) {
         const pageHeight = doc.page.height;

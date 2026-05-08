@@ -26,6 +26,7 @@ import { CalificacionInsumo } from '../calificacion_insumo/entities/calificacion
 import { ReporteInsumosService } from './services/reporte-insumos.service';
 import { ReporteRendimientoAnualService } from './services/reporte-rendimiento-anual.service';
 import { PeriodoLectivo } from '../periodos-lectivos/entities/periodos-lectivo.entity';
+import { CalificacionComponenteCualitativo } from '../calificacion-cualitativa/entities/calificacion-cualitativa.entity';
 
 @Module({
   imports: [
@@ -37,8 +38,8 @@ import { PeriodoLectivo } from '../periodos-lectivos/entities/periodos-lectivo.e
       Trimestre,
       Insumo,
       CalificacionInsumo,
-      PromedioPeriodo,
-      PeriodoLectivo
+      PeriodoLectivo,
+      CalificacionComponenteCualitativo
     ]),
     EstudiantesModule,
     TrimestresModule,
