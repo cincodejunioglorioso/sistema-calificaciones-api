@@ -4,7 +4,7 @@
 FROM node:22.13-alpine AS development
 
 # Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.14.0 --activate
 
 WORKDIR /app
 
@@ -28,7 +28,7 @@ CMD ["pnpm", "run", "start:dev"]
 # ================================
 FROM node:22.13-alpine AS build
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.14.0 --activate
 
 WORKDIR /app
 
